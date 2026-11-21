@@ -77,13 +77,12 @@ class _BootScreenState extends State<BootScreen>
     final screenHeight = mediaQuery.size.height;
 
     // Responsive logo sizing:
-    // Significantly larger than previous size, constrained by both screen width & height
-    // to preserve the original 612x408 (1.5:1) aspect ratio without cropping or distortion.
-    final double widthConstraint = screenWidth * 0.80;
-    final double heightConstraint = (screenHeight * 0.45) * 1.5;
+    // Appropriately constrained for mobile and desktop screens while strictly preserving aspect ratio.
+    final double widthConstraint = screenWidth * 0.78;
+    final double heightConstraint = (screenHeight * 0.42) * 1.5;
     final double responsiveLogoWidth =
         (widthConstraint < heightConstraint ? widthConstraint : heightConstraint)
-            .clamp(280.0, 520.0);
+            .clamp(180.0, 520.0);
 
     return Scaffold(
       body: Container(
@@ -100,13 +99,14 @@ class _BootScreenState extends State<BootScreen>
             ],
           ),
         ),
-        child: Center(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Image.asset(
-              'assets/images/civi_logo.png',
-              width: responsiveLogoWidth,
-              fit: BoxFit.contain,
+        child: SafeArea(
+          child: Center(
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: Image.asset(
+                'assets/images/civi_logo.png',
+                width: responsiveLogoWidth,
+                fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) {
                 return Container(
                   padding: const EdgeInsets.symmetric(
@@ -134,6 +134,7 @@ class _BootScreenState extends State<BootScreen>
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

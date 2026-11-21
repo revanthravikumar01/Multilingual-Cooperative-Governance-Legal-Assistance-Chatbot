@@ -91,15 +91,15 @@ class StandardChatbotView extends StatefulWidget {
 
 class _StandardChatbotViewState extends State<StandardChatbotView>
     with SingleTickerProviderStateMixin {
-  // Theme colors
-  static const Color _deepForest = Color(0xFF124E43);
-  static const Color _emerald = Color(0xFF2D8C75);
-  static const Color _lightGreen = Color(0xFFEAF3EF);
+  // Theme colors - refined to softer, lighter tones
+  static const Color _deepForest = Color(0xFF1B5E52);
+  static const Color _emerald = Color(0xFF329881);
+  static const Color _lightGreen = Color(0xFFEEF6F2);
 
   final List<CiviChatMessage> _messages = [];
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final FocusNode _focusNode = FocusNode();
+  final FocusNode _inputFocusNode = FocusNode();
 
   VoiceHardwareStatus _voiceStatus = VoiceHardwareStatus.idle;
   int _recordingSeconds = 0;
@@ -113,6 +113,8 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
   @override
   void initState() {
     super.initState();
+    // Register global hardware keyboard shortcut handler for persistent M, R, B responses
+    HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
     _loadInitialSampleConversation();
 
     _pulseController = AnimationController(
@@ -127,11 +129,12 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
     _recordingTimer?.cancel();
     _statusTransitionTimer?.cancel();
     _textController.dispose();
     _scrollController.dispose();
-    _focusNode.dispose();
+    _inputFocusNode.dispose();
     _pulseController.dispose();
     super.dispose();
   }
@@ -210,17 +213,28 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
 
   /// Hook for physical button 4: BACK
   /// 1st Press: Resets active session and conversation.
-  /// 2nd Press (when already reset): Navigates back to Accessibility Confirmation.
+  /// 2nd Press (when already reset): Navigates back to Accessibility Confirmation screen.
   void handlePhysicalBackPress() {
     if (!_isSessionReset && _messages.isNotEmpty) {
       handlePhysicalResetPress();
     } else {
-      Navigator.of(context).pop();
+      _navigateBackToAccessibility();
     }
+  }
+
+  /// Reliably navigates back to the Accessibility Confirmation screen,
+  /// passing the current language. Works regardless of navigator stack depth.
+  void _navigateBackToAccessibility() {
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      '/accessibility_confirmation',
+      (route) => route.settings.name == '/language_selection' || route.isFirst,
+      arguments: widget.language,
+    );
   }
 
   /// Hook for Session Reset.
   void handlePhysicalResetPress() {
+    _inputFocusNode.unfocus();
     setState(() {
       _messages.clear();
       _textController.clear();
@@ -245,6 +259,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
   }
 
   void _startVoiceRecording() {
+    _inputFocusNode.unfocus();
     _statusTransitionTimer?.cancel();
     setState(() {
       _voiceStatus = VoiceHardwareStatus.recording;
@@ -338,6 +353,9 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
       _textController.clear();
     });
 
+    // Unfocus text input so keyboard shortcuts (M, R, B) become active immediately
+    _inputFocusNode.unfocus();
+
     _scrollToBottom();
 
     // Typed questions produce text answers only (not spoken)
@@ -376,58 +394,99 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     });
   }
 
-  void _handleKeyboardEvent(KeyEvent event) {
-    if (event is KeyDownEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.keyV) {
-        handlePhysicalVoiceSelectorPress();
-      } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
+  bool _handleHardwareKeyEvent(KeyEvent event) {
+    if (!mounted) return false;
+
+    // Only process keyboard shortcuts when this route is the active (top) route
+    final modalRoute = ModalRoute.of(context);
+    if (modalRoute != null && !modalRoute.isCurrent) return false;
+
+    if (event is! KeyDownEvent) return false;
+
+    // Do not trigger shortcuts while the user is actively typing in the text input field
+    if (_inputFocusNode.hasFocus) return false;
+
+    if (event.logicalKey == LogicalKeyboardKey.keyM ||
+        event.logicalKey == LogicalKeyboardKey.keyV) {
+      handlePhysicalVoiceSelectorPress();
+      return true;
+    } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
+      // Do not interrupt an active recording unexpectedly
+      if (_voiceStatus != VoiceHardwareStatus.recording) {
         handlePhysicalRepeatVoicePress();
-      } else if (event.logicalKey == LogicalKeyboardKey.escape ||
-          event.logicalKey == LogicalKeyboardKey.keyB) {
-        handlePhysicalBackPress();
+        return true;
       }
+    } else if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.keyB) {
+      handlePhysicalBackPress();
+      return true;
     }
+
+    return false;
   }
 
   @override
   Widget build(BuildContext context) {
     final isTamil = widget.language == CiviLanguage.tamil;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F6),
-      body: KeyboardListener(
-        focusNode: _focusNode,
-        autofocus: true,
-        onKeyEvent: _handleKeyboardEvent,
-        child: SafeArea(
-          child: Column(
-            children: [
-              // 1. Header with branding, mode indicator, and reset button
-              _buildHeader(isTamil),
+    return PopScope(
+      // Intercept Android system back button / back gesture.
+      // canPop: false means we handle it ourselves.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) handlePhysicalBackPress();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF7FAF8),
+        body: SafeArea(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () {
+              if (_inputFocusNode.hasFocus) {
+                _inputFocusNode.unfocus();
+              }
+            },
+            child: Stack(
+              children: [
+                Column(
+                  children: [
+                    // 1. Header with branding, mode indicator, and reset button
+                    _buildHeader(isTamil),
 
-              // 2. Legal Disclaimer banner
-              _buildLegalDisclaimer(isTamil),
+                    // 2. Legal Disclaimer banner
+                    _buildLegalDisclaimer(isTamil),
 
-              // 3. Conversation Message Area
-              Expanded(
-                child: _messages.isEmpty
-                    ? _buildEmptyState(isTamil)
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          return _buildMessageItem(_messages[index]);
-                        },
-                      ),
-              ),
+                    // 3. Conversation Message Area
+                    Expanded(
+                      child: _messages.isEmpty
+                          ? _buildEmptyState(isTamil)
+                          : ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              itemCount: _messages.length,
+                              itemBuilder: (context, index) {
+                                return _buildMessageItem(_messages[index]);
+                              },
+                            ),
+                    ),
 
-              // 4. Hardware Voice Status Indicator
-              _buildVoiceStatusBar(isTamil),
+                    // 4. Hardware Voice Status Indicator
+                    _buildVoiceStatusBar(isTamil),
 
-              // 5. Text Input Area (NO on-screen microphone button)
-              _buildTextInputArea(isTamil),
-            ],
+                    // 5. Text Input Area (with on-screen microphone button)
+                    _buildTextInputArea(isTamil),
+                  ],
+                ),
+
+                // Centered animated listening visual during voice recording
+                if (_voiceStatus == VoiceHardwareStatus.recording)
+                  CiviListeningVisual(
+                    isTamil: isTamil,
+                    seconds: _recordingSeconds,
+                    onTap: handlePhysicalVoiceSelectorPress,
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -436,7 +495,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
 
   Widget _buildHeader(bool isTamil) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: const BoxDecoration(
         color: _deepForest,
         boxShadow: [
@@ -449,25 +508,31 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
       ),
       child: Row(
         children: [
-          // Logo placeholder or compact brand indicator
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _lightGreen.withValues(alpha: 0.4)),
-            ),
-            child: const Text(
-              'CIVI',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 16,
-                letterSpacing: 2.0,
-              ),
-            ),
+          // On-screen Back Button (same logic as physical BACK)
+          IconButton(
+            tooltip: isTamil ? 'பின்னால் (Back)' : 'Back',
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+            onPressed: handlePhysicalBackPress,
           ),
-          const SizedBox(width: 12),
+
+          // CIVI Brand Logo - noticeably enlarged and naturally blended
+          Image.asset(
+            'assets/images/civi_logo.png',
+            height: 48,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return const Text(
+                'CIVI',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 22,
+                  letterSpacing: 2.0,
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
 
           // Title and status badges
           Expanded(
@@ -482,8 +547,12 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
+                const SizedBox(height: 2),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -497,9 +566,12 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      isTamil ? 'தமிழ்' : 'English',
-                      style: TextStyle(color: _lightGreen.withValues(alpha: 0.8), fontSize: 11),
+                    Flexible(
+                      child: Text(
+                        isTamil ? 'தமிழ்' : 'English',
+                        style: TextStyle(color: _lightGreen.withValues(alpha: 0.8), fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -572,11 +644,15 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
   }
 
   Widget _buildMessageItem(CiviChatMessage msg) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isCompact = screenWidth < 400;
+
     if (msg.isUser) {
       return Align(
         alignment: Alignment.centerRight,
         child: Container(
-          margin: const EdgeInsets.only(left: 48, bottom: 10),
+          constraints: BoxConstraints(maxWidth: screenWidth * 0.84),
+          margin: EdgeInsets.only(left: isCompact ? 20 : 40, bottom: 10),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: _deepForest,
@@ -623,8 +699,9 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(right: 36, bottom: 12),
-        padding: const EdgeInsets.all(16),
+        constraints: BoxConstraints(maxWidth: screenWidth * 0.88),
+        margin: EdgeInsets.only(right: isCompact ? 18 : 32, bottom: 12),
+        padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: const BorderRadius.only(
@@ -660,12 +737,15 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'Cooperative Legal Guidance',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.black.withValues(alpha: 0.5),
-                    fontWeight: FontWeight.w500,
+                Flexible(
+                  child: Text(
+                    'Cooperative Legal Guidance',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.black.withValues(alpha: 0.5),
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -716,7 +796,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
 
   Widget _buildVoiceStatusBar(bool isTamil) {
     Color barColor = _deepForest;
-    IconData icon = Icons.volume_up;
+    IconData icon = Icons.radio_button_checked;
     String statusMessage = '';
 
     switch (_voiceStatus) {
@@ -749,39 +829,42 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
             : 'CIVI is speaking the answer...';
         break;
       case VoiceHardwareStatus.replaying:
-        barColor = const Color(0xFF2E7D32);
+        barColor = const Color(0xFF338A40);
         icon = Icons.replay;
         statusMessage = isTamil
-            ? 'சமீபத்திய CIVI பதில் மீண்டும் ஒலிக்கிறது...'
-            : 'Replaying latest CIVI answer (REPEAT VOICE)...';
+            ? 'மீண்டும் ஒலி (Repeat Voice)...'
+            : 'Replaying latest CIVI answer (Repeat Voice)...';
         break;
     }
 
-    return Container(
-      width: double.infinity,
-      color: barColor,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          if (_voiceStatus == VoiceHardwareStatus.recording)
-            ScaleTransition(
-              scale: _pulseAnimation,
-              child: const Icon(Icons.fiber_manual_record, color: Colors.white, size: 16),
-            )
-          else
-            Icon(icon, color: Colors.white, size: 16),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              statusMessage,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+    return InkWell(
+      onTap: handlePhysicalVoiceSelectorPress,
+      child: Container(
+        width: double.infinity,
+        color: barColor,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            if (_voiceStatus == VoiceHardwareStatus.recording)
+              ScaleTransition(
+                scale: _pulseAnimation,
+                child: const Icon(Icons.fiber_manual_record, color: Colors.white, size: 16),
+              )
+            else
+              Icon(icon, color: Colors.white, size: 16),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                statusMessage,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -801,33 +884,41 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
       ),
       child: Row(
         children: [
-          // Visual Mic Indicator (non-interactive, visually indicates voice interaction)
-          Container(
-            width: 38,
-            height: 38,
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              color: _voiceStatus == VoiceHardwareStatus.recording
-                  ? const Color(0xFFB71C1C)
-                  : _deepForest.withValues(alpha: 0.09),
-              shape: BoxShape.circle,
-              border: Border.all(
+          // On-Screen Microphone Button (Click to start / stop recording, synchronized with ESP32 button)
+          InkWell(
+            onTap: handlePhysicalVoiceSelectorPress,
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              width: 38,
+              height: 38,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
                 color: _voiceStatus == VoiceHardwareStatus.recording
-                    ? Colors.red
-                    : _emerald.withValues(alpha: 0.35),
-                width: 1.5,
+                    ? const Color(0xFFB71C1C)
+                    : _deepForest.withValues(alpha: 0.09),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: _voiceStatus == VoiceHardwareStatus.recording
+                      ? Colors.red
+                      : _emerald.withValues(alpha: 0.35),
+                  width: 1.5,
+                ),
               ),
-            ),
-            child: Tooltip(
-              message: isTamil
-                  ? 'ஒலிவாங்கி (Mic) நிலை காட்டி'
-                  : 'Mic indicator (press physical Mic button)',
-              child: Icon(
-                _voiceStatus == VoiceHardwareStatus.recording ? Icons.mic : Icons.mic_none,
-                size: 20,
-                color: _voiceStatus == VoiceHardwareStatus.recording
-                    ? Colors.white
-                    : _deepForest,
+              child: Tooltip(
+                message: isTamil
+                    ? (_voiceStatus == VoiceHardwareStatus.recording
+                        ? 'சமர்ப்பிக்க கிளிக் செய்யவும்'
+                        : 'பேச கிளிக் செய்யவும் (ஒலிவாங்கி)')
+                    : (_voiceStatus == VoiceHardwareStatus.recording
+                        ? 'Click to stop & submit'
+                        : 'Click to speak (Mic)'),
+                child: Icon(
+                  _voiceStatus == VoiceHardwareStatus.recording ? Icons.mic : Icons.mic_none,
+                  size: 20,
+                  color: _voiceStatus == VoiceHardwareStatus.recording
+                      ? Colors.white
+                      : _deepForest,
+                ),
               ),
             ),
           ),
@@ -836,6 +927,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
           Expanded(
             child: TextField(
               controller: _textController,
+              focusNode: _inputFocusNode,
               onSubmitted: (_) => _handleSendTypedMessage(),
               decoration: InputDecoration(
                 hintText: isTamil
@@ -896,15 +988,18 @@ class VisuallyChallengedChatbotView extends StatefulWidget {
 class _VisuallyChallengedChatbotViewState
     extends State<VisuallyChallengedChatbotView>
     with SingleTickerProviderStateMixin {
-  static const Color _lightGreen = Color(0xFFEAF3EF);
+  // Theme colors - refined to softer, lighter tones
+  static const Color _deepForest = Color(0xFF1D5A4E);
+  static const Color _emerald = Color(0xFF329881);
+  static const Color _lightGreen = Color(0xFFEEF6F2);
+
+  final List<CiviChatMessage> _messages = [];
+  final ScrollController _scrollController = ScrollController();
 
   VoiceHardwareStatus _voiceStatus = VoiceHardwareStatus.idle;
   int _recordingSeconds = 0;
   Timer? _recordingTimer;
   Timer? _statusTransitionTimer;
-
-  String _latestAnswer = '';
-  final FocusNode _focusNode = FocusNode();
 
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -912,11 +1007,9 @@ class _VisuallyChallengedChatbotViewState
   @override
   void initState() {
     super.initState();
-    final isTamil = widget.language == CiviLanguage.tamil;
-
-    _latestAnswer = isTamil
-        ? 'CIVI குரல்வழியாக உதவ தயாராக உள்ளது. கேள்வி கேட்க ஒலிவாங்கி (Mic) பொத்தானை ஒருமுறை அழுத்தவும்.'
-        : 'CIVI Voice Assistant is ready. Press the Mic button once to speak your legal inquiry.';
+    // Register global hardware keyboard shortcut handler for persistent M, R, B responses
+    HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
+    _loadInitialConversation();
 
     _pulseController = AnimationController(
       vsync: this,
@@ -928,13 +1021,41 @@ class _VisuallyChallengedChatbotViewState
     );
   }
 
+  void _loadInitialConversation() {
+    final isTamil = widget.language == CiviLanguage.tamil;
+    _messages.clear();
+    _messages.add(
+      CiviChatMessage(
+        text: isTamil
+            ? 'வணக்கம்! CIVI குரல்வழியாக உதவ தயாராக உள்ளது.\n\nகேள்வி கேட்க: பேசத் தொடங்குங்கள் (Start Speaking) – ஒலிவாங்கி (Mic) பொத்தானை அல்லது "M" விசையை அழுத்தவும்.'
+            : 'Welcome! CIVI Voice Assistant is ready.\n\nTo ask a question: Start Speaking – Press the Mic button or the "M" key to speak.',
+        isUser: false,
+        isVoice: true,
+        timestamp: DateTime.now(),
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
     _recordingTimer?.cancel();
     _statusTransitionTimer?.cancel();
-    _focusNode.dispose();
+    _scrollController.dispose();
     _pulseController.dispose();
     super.dispose();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -951,7 +1072,14 @@ class _VisuallyChallengedChatbotViewState
   }
 
   /// Hook for physical button 5: REPEAT VOICE
+  /// Replays the latest CIVI answer (never the user question).
   void handlePhysicalRepeatVoicePress() {
+    final int index = _messages.lastIndexWhere((m) => !m.isUser);
+    if (index == -1) return;
+
+    final latestBotAnswer = _messages[index];
+    if (latestBotAnswer.text.isEmpty) return;
+
     setState(() {
       _voiceStatus = VoiceHardwareStatus.replaying;
     });
@@ -966,9 +1094,36 @@ class _VisuallyChallengedChatbotViewState
   }
 
   /// Hook for physical button 4: BACK
-  /// Returns to the Accessibility Confirmation screen.
+  /// Returns to the Accessibility Confirmation screen reliably.
   void handlePhysicalBackPress() {
-    Navigator.of(context).pop();
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      '/accessibility_confirmation',
+      (route) => route.settings.name == '/language_selection' || route.isFirst,
+      arguments: widget.language,
+    );
+  }
+
+  /// Hook for Session Reset.
+  void handlePhysicalResetPress() {
+    setState(() {
+      _loadInitialConversation();
+      _voiceStatus = VoiceHardwareStatus.idle;
+      _recordingTimer?.cancel();
+      _statusTransitionTimer?.cancel();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: _deepForest,
+        content: Text(
+          widget.language == CiviLanguage.tamil
+              ? 'அமர்வு மீட்டமைக்கப்பட்டது (Session Reset).'
+              : 'Session reset.',
+          style: const TextStyle(color: _lightGreen),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _startVoiceRecording() {
@@ -998,16 +1153,46 @@ class _VisuallyChallengedChatbotViewState
 
     final isTamil = widget.language == CiviLanguage.tamil;
 
+    // Simulate voice question processing (Speech-to-Text conversion) and response generation
     _statusTransitionTimer = Timer(const Duration(milliseconds: 2000), () {
       if (!mounted) return;
 
+      // 1. Speech-to-Text converted question displayed as normal user message
+      final voiceUserQuestion = CiviChatMessage(
+        text: isTamil
+            ? 'கூட்டுறவு சங்க நிர்வாகக் குழுவின் பணிக்காலம் எவ்வளவு?'
+            : 'What is the tenure of the elected managing committee in a cooperative society?',
+        isUser: true,
+        isVoice: true,
+        timestamp: DateTime.now(),
+      );
+
+      // 2. Chatbot response displayed as normal CIVI response
+      final voiceBotAnswer = CiviChatMessage(
+        text: isTamil
+            ? 'தமிழ்நாடு கூட்டுறவு சங்கங்கள் சட்டம் 1983 பிரிவு 33-ன் படி:\n\n'
+                '• தேர்ந்தெடுக்கப்பட்ட நிர்வாகக் குழுவின் பதவிக்காலம் அதன் முதல் கூட்ட தேதியிலிருந்து **ஐந்து ஆண்டுகள் (5 Years)** ஆகும்.\n'
+                '• பதவிக்காலம் நிறைவடையும் முன் புதிய குழுவிற்கான தேர்தல் முறையாக நடத்தப்பட வேண்டும்.'
+            : 'Under Section 33 of the Tamil Nadu Cooperative Societies Act, 1983:\n\n'
+                '• The term of office of the elected members of the board shall be **five years (5 Years)** from the date of election.\n'
+                '• Fresh elections must be conducted before the expiration of the current committee’s tenure.',
+        isUser: false,
+        isVoice: true,
+        sourceReference: isTamil
+            ? 'தமிழ்நாடு கூட்டுறவு சங்கங்கள் சட்டம், 1983 — பிரிவு 33'
+            : 'Tamil Nadu Cooperative Societies Act, 1983 — Section 33',
+        timestamp: DateTime.now(),
+      );
+
       setState(() {
-        _latestAnswer = isTamil
-            ? 'கூட்டுறவு சங்க நிர்வாகக் குழுவின் பதவிக்காலம் ஐந்து ஆண்டுகள் ஆகும். தமிழ்நாடு கூட்டுறவு சங்கங்கள் சட்டம் 1983 பிரிவு 33-ன் படி இது நிர்ணயிக்கப்பட்டுள்ளது.'
-            : 'The tenure of an elected cooperative society board is five years. This is governed by Section 33 of the Tamil Nadu Cooperative Societies Act, 1983.';
+        _messages.add(voiceUserQuestion);
+        _messages.add(voiceBotAnswer);
         _voiceStatus = VoiceHardwareStatus.speaking;
       });
 
+      _scrollToBottom();
+
+      // Answers generated from voice questions are automatically spoken in this mode
       _statusTransitionTimer = Timer(const Duration(milliseconds: 4000), () {
         if (!mounted) return;
         setState(() {
@@ -1017,216 +1202,693 @@ class _VisuallyChallengedChatbotViewState
     });
   }
 
-  void _handleKeyboardEvent(KeyEvent event) {
-    if (event is KeyDownEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.keyV) {
-        handlePhysicalVoiceSelectorPress();
-      } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
+  bool _handleHardwareKeyEvent(KeyEvent event) {
+    if (!mounted) return false;
+
+    // Only process keyboard shortcuts when this route is the active (top) route
+    final modalRoute = ModalRoute.of(context);
+    if (modalRoute != null && !modalRoute.isCurrent) return false;
+
+    if (event is! KeyDownEvent) return false;
+
+    if (event.logicalKey == LogicalKeyboardKey.keyM ||
+        event.logicalKey == LogicalKeyboardKey.keyV) {
+      handlePhysicalVoiceSelectorPress();
+      return true;
+    } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
+      // Do not interrupt an active recording unexpectedly
+      if (_voiceStatus != VoiceHardwareStatus.recording) {
         handlePhysicalRepeatVoicePress();
-      } else if (event.logicalKey == LogicalKeyboardKey.escape ||
-          event.logicalKey == LogicalKeyboardKey.keyB) {
-        handlePhysicalBackPress();
+        return true;
       }
+    } else if (event.logicalKey == LogicalKeyboardKey.escape ||
+        event.logicalKey == LogicalKeyboardKey.keyB) {
+      handlePhysicalBackPress();
+      return true;
     }
+
+    return false;
   }
 
   @override
   Widget build(BuildContext context) {
     final isTamil = widget.language == CiviLanguage.tamil;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF091A16), // High contrast dark background
-      body: KeyboardListener(
-        focusNode: _focusNode,
-        autofocus: true,
-        onKeyEvent: _handleKeyboardEvent,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Top Header: Visually Challenged Mode Indicator
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: _lightGreen, width: 2),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.record_voice_over, color: _lightGreen, size: 28),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Text(
-                          isTamil
-                              ? 'பார்வைக் குறைபாடு பயன்முறை'
-                              : 'VISUALLY CHALLENGED MODE',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
+    return PopScope(
+      // Intercept Android system back button / back gesture.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) handlePhysicalBackPress();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF102420), // Softer, lighter deep forest background
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 1. Top Header: Visually Challenged Mode & Status
+                  _buildAccessibleHeader(isTamil),
 
-                // Primary Large Status Card
-                _buildLargeStatusCard(isTamil),
-                const SizedBox(height: 16),
-
-                // Latest Answer Card (Large Readable Typography)
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF132B25),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: _lightGreen.withValues(alpha: 0.5), width: 2),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isTamil ? 'சமீபத்திய பதில்:' : 'LATEST ANSWER:',
-                          style: const TextStyle(
-                            color: _lightGreen,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Expanded(
-                          child: SingleChildScrollView(
-                            child: Text(
-                              _latestAnswer,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                height: 1.45,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                  // 2. Conversation Area (Natural conversational chat bubbles)
+                  Expanded(
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                      itemCount: _messages.length,
+                      itemBuilder: (context, index) {
+                        return _buildAccessibleMessageBubble(_messages[index]);
+                      },
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
 
-                // Hardware Button Reference Guidance Cards
-                _buildHardwareInstructions(isTamil),
-              ],
-            ),
+                  // 3. Hardware Voice Status Bar
+                  _buildAccessibleVoiceStatusBar(isTamil),
+
+                  // 4. Hardware Reference Guidance Cards (No text input in this mode)
+                  _buildAccessibleHardwareCards(isTamil),
+                ],
+              ),
+
+              // Centered animated listening visual during voice recording
+              if (_voiceStatus == VoiceHardwareStatus.recording)
+                CiviListeningVisual(
+                  isTamil: isTamil,
+                  seconds: _recordingSeconds,
+                  onTap: handlePhysicalVoiceSelectorPress,
+                ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildLargeStatusCard(bool isTamil) {
-    Color cardColor = const Color(0xFF132B25);
-    String title = '';
-    String instruction = '';
-
-    switch (_voiceStatus) {
-      case VoiceHardwareStatus.idle:
-        title = isTamil ? 'காத்திருப்பு நிலை (IDLE)' : 'READY (IDLE)';
-        instruction = isTamil
-            ? 'கேள்வி கேட்க ஒலிவாங்கி (Mic) பொத்தானை ஒருமுறை அழுத்தவும்.'
-            : 'Press the Mic button once to start speaking.';
-        break;
-      case VoiceHardwareStatus.recording:
-        cardColor = const Color(0xFF8B0000);
-        title = isTamil ? 'பதிவாகிறது (${_recordingSeconds}s)' : 'RECORDING (${_recordingSeconds}s)';
-        instruction = isTamil
-            ? 'சமர்ப்பிக்க மீண்டும் ஒலிவாங்கி (Mic) பொத்தானை அழுத்தவும்.'
-            : 'Press the Mic button again to submit.';
-        break;
-      case VoiceHardwareStatus.processing:
-        cardColor = const Color(0xFF1B5E20);
-        title = isTamil ? 'ஆய்வு செய்கிறது...' : 'PROCESSING...';
-        instruction = isTamil
-            ? 'தயவுசெய்து காத்திருக்கவும்.'
-            : 'Please wait while answering.';
-        break;
-      case VoiceHardwareStatus.speaking:
-        cardColor = const Color(0xFF0D47A1);
-        title = isTamil ? 'பதில் ஒலிக்கிறது...' : 'SPEAKING ANSWER...';
-        instruction = isTamil
-            ? 'பதில் தற்போது குரல்வழியாக ஒலிக்கிறது.'
-            : 'CIVI is speaking the answer.';
-        break;
-      case VoiceHardwareStatus.replaying:
-        cardColor = const Color(0xFF2E7D32);
-        title = isTamil ? 'மீண்டும் ஒலிக்கிறது...' : 'REPLAYING...';
-        instruction = isTamil
-            ? 'சமீபத்திய பதில் மீண்டும் ஒலிக்கிறது.'
-            : 'Replaying the latest answer.';
-        break;
-    }
-
+  Widget _buildAccessibleHeader(bool isTamil) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _lightGreen, width: 2.5),
+        color: const Color(0xFF16322C),
+        border: Border(
+          bottom: BorderSide(color: _lightGreen.withValues(alpha: 0.35), width: 1.5),
+        ),
       ),
       child: Row(
         children: [
-          // Large, highly visible Microphone Visual Indicator
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _voiceStatus == VoiceHardwareStatus.recording
-                  ? Colors.red.withValues(alpha: 0.3)
-                  : _lightGreen.withValues(alpha: 0.12),
-              border: Border.all(
-                color: _voiceStatus == VoiceHardwareStatus.recording
-                    ? Colors.white
-                    : _lightGreen,
-                width: 2,
-              ),
-            ),
-            child: Center(
-              child: _voiceStatus == VoiceHardwareStatus.recording
-                  ? ScaleTransition(
-                      scale: _pulseAnimation,
-                      child: const Icon(Icons.mic, color: Colors.white, size: 36),
-                    )
-                  : const Icon(Icons.mic, color: _lightGreen, size: 36),
-            ),
+          // On-screen Back Button (same logic as physical BACK)
+          IconButton(
+            tooltip: isTamil ? 'பின்னால் (Back)' : 'Back',
+            icon: Icon(Icons.arrow_back_ios_new, color: _lightGreen, size: 20),
+            onPressed: handlePhysicalBackPress,
           ),
-          const SizedBox(width: 18),
+
+          // CIVI Brand Logo in accessible top-left header - noticeably enlarged and naturally blended
+          Image.asset(
+            'assets/images/civi_logo.png',
+            height: 48,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return const Text(
+                'CIVI',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 22,
+                  letterSpacing: 1.5,
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  title,
+                  isTamil ? 'பார்வைக் குறைபாடு பயன்முறை (Visually Challenged Mode)' : 'VISUALLY CHALLENGED MODE',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
+                    fontSize: 14,
                     fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  isTamil ? 'குரல்வழி சட்ட உதவி (Voice Legal Assistance)' : 'Voice-First Legal Assistance',
+                  style: TextStyle(
+                    color: _lightGreen.withValues(alpha: 0.85),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: isTamil ? 'அமர்வு மீட்டமை (Reset Session)' : 'Reset Session',
+            icon: const Icon(Icons.refresh, color: Colors.white, size: 24),
+            onPressed: handlePhysicalResetPress,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Builds natural conversational chat bubbles with large readable typography.
+  /// Does not explicitly label messages as "Question", "Answer", "User Question" or "Bot Answer".
+  Widget _buildAccessibleMessageBubble(CiviChatMessage msg) {
+    if (msg.isUser) {
+      // User chat bubble (speech-to-text converted question)
+      return Align(
+        alignment: Alignment.centerRight,
+        child: Container(
+          margin: const EdgeInsets.only(left: 36, bottom: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: BoxDecoration(
+            color: _deepForest,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(6),
+              bottomLeft: Radius.circular(20),
+              bottomRight: Radius.circular(20),
+            ),
+            border: Border.all(color: _lightGreen.withValues(alpha: 0.8), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Text(
+            msg.text,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // CIVI Chatbot response bubble
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(right: 30, bottom: 16),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1B3D35),
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(6),
+            topRight: Radius.circular(20),
+            bottomLeft: Radius.circular(20),
+            bottomRight: Radius.circular(20),
+          ),
+          border: Border.all(color: _lightGreen.withValues(alpha: 0.7), width: 2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _deepForest,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: _lightGreen.withValues(alpha: 0.6)),
+                  ),
+                  child: const Text(
+                    'CIVI',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(width: 8),
+                const Icon(Icons.record_voice_over, color: _lightGreen, size: 16),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              msg.text,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+                height: 1.45,
+              ),
+            ),
+            if (msg.sourceReference != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _lightGreen.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.menu_book, size: 15, color: _lightGreen),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        msg.sourceReference!,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: _lightGreen,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccessibleVoiceStatusBar(bool isTamil) {
+    Color barColor = _deepForest;
+    IconData icon = Icons.hearing;
+    String statusMessage = '';
+
+    switch (_voiceStatus) {
+      case VoiceHardwareStatus.idle:
+        barColor = const Color(0xFF1B3D35);
+        icon = Icons.mic_none;
+        statusMessage = isTamil
+            ? 'பேசத் தொடங்குங்கள் (Start Speaking) – ஒலிவாங்கி (Mic) அழுத்தவும்.'
+            : 'Press the Mic button to speak.';
+        break;
+      case VoiceHardwareStatus.recording:
+        barColor = const Color(0xFF9E1B1B);
+        icon = Icons.mic;
+        statusMessage = isTamil
+            ? 'பதிவாகிறது (Recording) (${_recordingSeconds}s)... சமர்ப்பிக்க மீண்டும் அழுத்தவும்.'
+            : 'Recording (${_recordingSeconds}s)... Press the Mic button again to submit.';
+        break;
+      case VoiceHardwareStatus.processing:
+        barColor = _emerald;
+        icon = Icons.hourglass_top;
+        statusMessage = isTamil
+            ? 'ஆய்வு செய்யப்படுகிறது (Processing)...'
+            : 'Processing voice legal inquiry...';
+        break;
+      case VoiceHardwareStatus.speaking:
+        barColor = const Color(0xFF15549A);
+        icon = Icons.record_voice_over;
+        statusMessage = isTamil
+            ? 'பதில் கூறப்படுகிறது (Speaking)...'
+            : 'CIVI is speaking the answer...';
+        break;
+      case VoiceHardwareStatus.replaying:
+        barColor = const Color(0xFF2E7D32);
+        icon = Icons.replay;
+        statusMessage = isTamil
+            ? 'மீண்டும் ஒலி (Repeat Voice)...'
+            : 'Replaying latest CIVI answer (Repeat Voice)...';
+        break;
+    }
+
+    return InkWell(
+      onTap: handlePhysicalVoiceSelectorPress,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: barColor,
+          border: Border(
+            top: BorderSide(color: _lightGreen.withValues(alpha: 0.4), width: 1.5),
+          ),
+        ),
+        child: Row(
+          children: [
+            if (_voiceStatus == VoiceHardwareStatus.recording)
+              ScaleTransition(
+                scale: _pulseAnimation,
+                child: const Icon(Icons.fiber_manual_record, color: Colors.white, size: 20),
+              )
+            else
+              Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                statusMessage,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccessibleHardwareCards(bool isTamil) {
+    return Container(
+      color: const Color(0xFF16322C),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: Row(
+        children: [
+          // On-Screen Mic Button Card (Click to start/stop recording, synchronized with ESP32 button)
+          Expanded(
+            child: InkWell(
+              onTap: handlePhysicalVoiceSelectorPress,
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _voiceStatus == VoiceHardwareStatus.recording
+                      ? const Color(0xFF9E1B1B)
+                      : const Color(0xFF1E433B),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _voiceStatus == VoiceHardwareStatus.recording
+                        ? Colors.red
+                        : _lightGreen.withValues(alpha: 0.45),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _voiceStatus == VoiceHardwareStatus.recording ? Icons.mic : Icons.mic_none,
+                      color: _voiceStatus == VoiceHardwareStatus.recording ? Colors.white : _lightGreen,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _voiceStatus == VoiceHardwareStatus.recording
+                              ? (isTamil ? 'நிறுத்து (Stop)' : 'STOP MIC')
+                              : (isTamil ? 'பேசுக (Mic)' : 'MIC (Speak)'),
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+
+          // Repeat Voice reference
+          Expanded(
+            child: InkWell(
+              onTap: handlePhysicalRepeatVoicePress,
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E433B),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _lightGreen.withValues(alpha: 0.45)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.replay, color: _lightGreen, size: 16),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          isTamil ? 'மீண்டும் ஒலி (Repeat Voice)' : 'REPEAT VOICE',
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+
+          // Back reference
+          Expanded(
+            child: InkWell(
+              onTap: handlePhysicalBackPress,
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E433B),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _lightGreen.withValues(alpha: 0.45)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.arrow_back, color: _lightGreen, size: 16),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          isTamil ? 'பின்னால் (Back)' : 'BACK',
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// MODULAR LISTENING / RECORDING ANIMATION
+// =============================================================================
+
+/// Displays a centered, medium-sized animated microphone visual with subtle
+/// expanding audio-wave rings and soft emerald glow during active voice recording.
+///
+/// Features:
+/// - Reuses CIVI theme: Deep Forest (#124E43), Emerald (#2D8C75), Light Green (#EAF3EF).
+/// - Non-interactive (wrapped in [IgnorePointer]).
+/// - Displays duration counter and localized status tag.
+/// - Automatically disposes its [AnimationController] when unmounted.
+class CiviListeningVisual extends StatefulWidget {
+  final bool isTamil;
+  final int? seconds;
+  final VoidCallback? onTap;
+
+  const CiviListeningVisual({
+    super.key,
+    required this.isTamil,
+    this.seconds,
+    this.onTap,
+  });
+
+  @override
+  State<CiviListeningVisual> createState() => _CiviListeningVisualState();
+}
+
+class _CiviListeningVisualState extends State<CiviListeningVisual>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _waveController;
+
+  static const Color _deepForest = Color(0xFF1B5E52);
+  static const Color _emerald = Color(0xFF329881);
+  static const Color _lightGreen = Color(0xFFEEF6F2);
+
+  @override
+  void initState() {
+    super.initState();
+    _waveController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _waveController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visualContent = Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 150,
+            height: 150,
+            child: AnimatedBuilder(
+              animation: _waveController,
+              builder: (context, child) {
+                final progress = _waveController.value;
+
+                // Wave ring 1
+                final wave1Scale = 1.0 + (progress * 0.45);
+                final wave1Opacity = ((1.0 - progress) * 0.45).clamp(0.0, 1.0);
+
+                // Wave ring 2 (offset phase)
+                final wave2Progress = (progress + 0.5) % 1.0;
+                final wave2Scale = 1.0 + (wave2Progress * 0.45);
+                final wave2Opacity = ((1.0 - wave2Progress) * 0.45).clamp(0.0, 1.0);
+
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Outer Audio-wave ring 1
+                    Transform.scale(
+                      scale: wave1Scale,
+                      child: Container(
+                        width: 86,
+                        height: 86,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: _emerald.withValues(alpha: wave1Opacity),
+                            width: 3.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Outer Audio-wave ring 2
+                    Transform.scale(
+                      scale: wave2Scale,
+                      child: Container(
+                        width: 86,
+                        height: 86,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: _lightGreen.withValues(alpha: wave2Opacity),
+                            width: 2.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Ambient emerald glow
+                    Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: _emerald.withValues(alpha: 0.4),
+                            blurRadius: 22,
+                            spreadRadius: 4,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Center Mic Core Circle
+                    Container(
+                      width: 76,
+                      height: 76,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [_deepForest, _emerald],
+                        ),
+                        border: Border.all(
+                          color: _lightGreen,
+                          width: 2.5,
+                        ),
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.mic,
+                          color: Colors.white,
+                          size: 38,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Floating Status Pill Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: _deepForest.withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: _lightGreen.withValues(alpha: 0.5),
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFEF5350), // Recording indicator dot
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Text(
-                  instruction,
-                  style: TextStyle(
-                    color: _lightGreen.withValues(alpha: 0.9),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
+                  widget.isTamil
+                      ? (widget.seconds != null && widget.seconds! > 0
+                          ? 'கேட்கிறது (Listening) (${widget.seconds}s)...'
+                          : 'கேட்கிறது (Listening)...')
+                      : (widget.seconds != null && widget.seconds! > 0
+                          ? 'Listening (${widget.seconds}s)...'
+                          : 'Listening...'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ],
@@ -1235,85 +1897,17 @@ class _VisuallyChallengedChatbotViewState
         ],
       ),
     );
-  }
 
-  Widget _buildHardwareInstructions(bool isTamil) {
-    return Column(
-      children: [
-        // Mic Instruction Guidance Card
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _lightGreen.withValues(alpha: 0.5), width: 1.5),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.mic, color: _lightGreen, size: 24),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  isTamil
-                      ? 'ஒலிவாங்கி (Mic) பொத்தான்: பேச ஒருமுறை, சமர்ப்பிக்க மீண்டும் அழுத்தவும்.'
-                      : 'Mic Button: Press once to speak, press again to submit.',
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
+    if (widget.onTap != null) {
+      return GestureDetector(
+        onTap: widget.onTap,
+        behavior: HitTestBehavior.deferToChild,
+        child: visualContent,
+      );
+    }
 
-        // Repeat Voice Instruction Card
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white24),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.replay, color: _lightGreen, size: 22),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  isTamil
-                      ? 'REPEAT VOICE பொத்தான்: பதிலை மீண்டும் கேட்கலாம்.'
-                      : 'REPEAT VOICE Button: Replays latest answer.',
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        // Back Instruction Card
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white24),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.arrow_back, color: _lightGreen, size: 22),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  isTamil
-                      ? 'BACK பொத்தான்: அணுகல் முறைத் தேர்வுக்குத் திரும்பலாம்.'
-                      : 'BACK Button: Returns to Accessibility Settings.',
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+    return IgnorePointer(
+      child: visualContent,
     );
   }
 }

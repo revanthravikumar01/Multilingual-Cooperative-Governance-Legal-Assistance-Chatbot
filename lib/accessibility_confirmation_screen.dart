@@ -196,7 +196,9 @@ class _AccessibilityConfirmationScreenState
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 600;
-    final panelWidth = isDesktop ? 460.0 : (size.width * 0.88).clamp(280.0, 400.0);
+    final horizontalPadding = size.width < 360 ? 16.0 : 24.0;
+    final availableWidth = size.width - (horizontalPadding * 2);
+    final panelWidth = isDesktop ? 460.0 : (size.width * 0.90).clamp(240.0, availableWidth < 400.0 ? availableWidth : 400.0);
     final isTamil = _language == CiviLanguage.tamil;
 
     return Scaffold(
@@ -223,7 +225,7 @@ class _AccessibilityConfirmationScreenState
           child: SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -276,9 +278,9 @@ class _AccessibilityConfirmationScreenState
                           ? 'CIVI-ஐ நீங்கள் எவ்வாறு பயன்படுத்த விரும்புகிறீர்கள்?'
                           : 'How would you like to use CIVI?',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: _lightGreen,
-                        fontSize: 20,
+                        fontSize: size.width < 360 ? 17 : 20,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.5,
                       ),
@@ -310,7 +312,7 @@ class _AccessibilityConfirmationScreenState
                       width: panelWidth,
                     ),
 
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 36),
 
                     // On-screen Confirm Button (mirrors physical YES button)
                     SizedBox(
@@ -326,25 +328,28 @@ class _AccessibilityConfirmationScreenState
                             borderRadius: BorderRadius.circular(27),
                           ),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.check_circle_outline, size: 22),
-                            const SizedBox(width: 10),
-                            Text(
-                              isTamil ? 'உறுதி செய் (YES)' : 'CONFIRM (YES)',
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.2,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.check_circle_outline, size: 22),
+                              const SizedBox(width: 10),
+                              Text(
+                                isTamil ? 'உறுதி செய் (YES)' : 'CONFIRM (YES)',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.2,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
 
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 16),
 
                     // Dedicated Visually Challenged button emulator
                     SizedBox(
@@ -359,16 +364,19 @@ class _AccessibilityConfirmationScreenState
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(27),
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                         ),
                         icon: const Icon(Icons.accessibility_new, size: 20),
-                        label: Text(
-                          isTamil
-                              ? 'பார்வைக் குறைபாடு நேரடி பொத்தான் (V)'
-                              : 'Dedicated Visually Challenged Button (Press V)',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            isTamil
+                                ? 'பார்வைக் குறைபாடு நேரடி பொத்தான் (V)'
+                                : 'Dedicated Visually Challenged Button (Press V)',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
@@ -431,11 +439,11 @@ class _AccessibilityConfirmationScreenState
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
           width: width,
-          height: 88,
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+          constraints: const BoxConstraints(minHeight: 84),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
             color: backgroundColor,
-            borderRadius: BorderRadius.circular(44),
+            borderRadius: BorderRadius.circular(42),
             border: Border.all(color: borderColor, width: borderWidth),
             boxShadow: isSelected
                 ? [

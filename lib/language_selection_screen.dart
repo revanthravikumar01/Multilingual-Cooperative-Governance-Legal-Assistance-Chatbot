@@ -136,7 +136,9 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 600;
-    final panelWidth = isDesktop ? 440.0 : (size.width * 0.88).clamp(280.0, 380.0);
+    final horizontalPadding = size.width < 360 ? 16.0 : 24.0;
+    final availableWidth = size.width - (horizontalPadding * 2);
+    final panelWidth = isDesktop ? 440.0 : (size.width * 0.90).clamp(240.0, availableWidth < 380.0 ? availableWidth : 380.0);
 
     return Scaffold(
       body: KeyboardListener(
@@ -162,7 +164,7 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
           child: SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 28),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -194,12 +196,12 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
                       width: panelWidth,
                     ),
 
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 44),
 
                     // On-screen Confirm Button (mirrors physical YES button)
                     SizedBox(
                       width: panelWidth,
-                      height: 56,
+                      height: 54,
                       child: ElevatedButton(
                         onPressed: confirmLanguage,
                         style: ElevatedButton.styleFrom(
@@ -208,22 +210,25 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
                           elevation: 4,
                           shape: RoundedRectangle64(),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.check_circle_outline, size: 22),
-                            const SizedBox(width: 10),
-                            Text(
-                              _selectedLanguage == CiviLanguage.english
-                                  ? 'CONFIRM (YES)'
-                                  : 'உறுதி செய் (YES)',
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.2,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.check_circle_outline, size: 22),
+                              const SizedBox(width: 10),
+                              Text(
+                                _selectedLanguage == CiviLanguage.english
+                                    ? 'CONFIRM (YES)'
+                                    : 'உறுதி செய் (YES)',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.2,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -283,11 +288,11 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
           width: width,
-          height: 84,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          constraints: const BoxConstraints(minHeight: 80),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
           decoration: BoxDecoration(
             color: backgroundColor,
-            borderRadius: BorderRadius.circular(42), // Pill shape
+            borderRadius: BorderRadius.circular(40), // Pill shape
             border: Border.all(color: borderColor, width: borderWidth),
             boxShadow: isSelected
                 ? [
