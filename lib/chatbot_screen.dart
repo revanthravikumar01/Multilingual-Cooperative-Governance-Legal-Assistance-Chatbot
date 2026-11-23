@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'language_selection_screen.dart';
 import 'accessibility_confirmation_screen.dart';
+import 'services/civi_api_service.dart';
 
 /// Models a message in the CIVI legal conversation.
 class CiviChatMessage {
@@ -334,7 +335,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     });
   }
 
-  void _handleSendTypedMessage() {
+  Future<void> _handleSendTypedMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
@@ -358,28 +359,52 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
 
     _scrollToBottom();
 
-    // Typed questions produce text answers only (not spoken)
-    Future.delayed(const Duration(milliseconds: 700), () {
+    try {
+      final response = await CiviApiService().sendTextMessage(
+        message: text,
+        language: isTamil ? 'ta' : 'en',
+      );
+      if (!mounted) return;
+      setState(() {
+        _messages.add(
+          CiviChatMessage(
+            text: response.answer,
+            isUser: false,
+            isVoice: false,
+            timestamp: DateTime.now(),
+          ),
+        );
+      });
+    } on CiviApiException catch (error) {
       if (!mounted) return;
       setState(() {
         _messages.add(
           CiviChatMessage(
             text: isTamil
-                ? 'உங்கள் வினவல் பதிவு செய்யப்பட்டுள்ளது: "$text".\n\n'
-                    'கூட்டுறவு சங்க விதிகளின்படி, குறிப்பிட்ட விதிமுறைகள் மற்றும் அதிகாரப்பூர்வ ஆவணங்களை சரிபார்க்கவும்.'
-                : 'Your legal inquiry regarding "$text" has been recorded.\n\n'
-                    'According to applicable cooperative governance regulations, statutory procedures must be verified against official notifications.',
+                ? 'சேவையகத்துடன் இணைக்க முடியவில்லை: ${error.message}'
+                : 'Unable to connect to the CIVI server: ${error.message}',
             isUser: false,
             isVoice: false,
-            sourceReference: isTamil
-                ? 'கூட்டுறவு சங்க வழிகாட்டுதல்கள் (பொது விதிமுறை)'
-                : 'Cooperative Governance Guidelines (General Section)',
             timestamp: DateTime.now(),
           ),
         );
       });
-      _scrollToBottom();
-    });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _messages.add(
+          CiviChatMessage(
+            text: isTamil
+                ? 'சேவையகத்தை அணுக முடியவில்லை. Wi-Fi இணைப்பு மற்றும் சேவையகத்தின் முகவரியைச் சரிபார்க்கவும்.'
+                : 'Unable to reach the CIVI server. Check the Wi-Fi connection and server address.',
+            isUser: false,
+            isVoice: false,
+            timestamp: DateTime.now(),
+          ),
+        );
+      });
+    }
+    _scrollToBottom();
   }
 
   void _scrollToBottom() {

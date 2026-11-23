@@ -1,0 +1,1 @@
+"""CIVI FastAPI application package."""
