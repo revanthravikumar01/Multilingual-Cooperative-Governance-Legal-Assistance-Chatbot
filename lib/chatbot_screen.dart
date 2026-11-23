@@ -428,6 +428,9 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
   @override
   Widget build(BuildContext context) {
     final isTamil = widget.language == CiviLanguage.tamil;
+    final mediaQuery = MediaQuery.of(context);
+    final isLandscape = mediaQuery.orientation == Orientation.landscape;
+    final isCompactHeight = isLandscape && mediaQuery.size.height < 500;
 
     return PopScope(
       // Intercept Android system back button / back gesture.
@@ -451,30 +454,30 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
                 Column(
                   children: [
                     // 1. Header with branding, mode indicator, and reset button
-                    _buildHeader(isTamil),
+                    _buildHeader(isTamil, isCompactHeight: isCompactHeight),
 
                     // 2. Legal Disclaimer banner
-                    _buildLegalDisclaimer(isTamil),
+                    _buildLegalDisclaimer(isTamil, isCompactHeight: isCompactHeight),
 
                     // 3. Conversation Message Area
                     Expanded(
                       child: _messages.isEmpty
-                          ? _buildEmptyState(isTamil)
+                          ? _buildEmptyState(isTamil, isCompactHeight: isCompactHeight)
                           : ListView.builder(
                               controller: _scrollController,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              padding: EdgeInsets.symmetric(horizontal: 16, vertical: isCompactHeight ? 6 : 12),
                               itemCount: _messages.length,
                               itemBuilder: (context, index) {
-                                return _buildMessageItem(_messages[index]);
+                                return _buildMessageItem(_messages[index], isCompactHeight: isCompactHeight);
                               },
                             ),
                     ),
 
                     // 4. Hardware Voice Status Indicator
-                    _buildVoiceStatusBar(isTamil),
+                    _buildVoiceStatusBar(isTamil, isCompactHeight: isCompactHeight),
 
                     // 5. Text Input Area (with on-screen microphone button)
-                    _buildTextInputArea(isTamil),
+                    _buildTextInputArea(isTamil, isCompactHeight: isCompactHeight),
                   ],
                 ),
 
@@ -493,9 +496,12 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     );
   }
 
-  Widget _buildHeader(bool isTamil) {
+  Widget _buildHeader(bool isTamil, {bool isCompactHeight = false}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: isCompactHeight ? 4 : 8,
+      ),
       decoration: const BoxDecoration(
         color: _deepForest,
         boxShadow: [
@@ -511,22 +517,24 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
           // On-screen Back Button (same logic as physical BACK)
           IconButton(
             tooltip: isTamil ? 'பின்னால் (Back)' : 'Back',
+            padding: isCompactHeight ? EdgeInsets.zero : const EdgeInsets.all(8),
+            constraints: isCompactHeight ? const BoxConstraints(minWidth: 36, minHeight: 36) : null,
             icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
             onPressed: handlePhysicalBackPress,
           ),
 
-          // CIVI Brand Logo - noticeably enlarged and naturally blended
+          // CIVI Brand Logo - noticeably enlarged in portrait, gracefully scaled in landscape mobile
           Image.asset(
             'assets/images/civi_logo.png',
-            height: 48,
+            height: isCompactHeight ? 34 : 48,
             fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) {
-              return const Text(
+              return Text(
                 'CIVI',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
-                  fontSize: 22,
+                  fontSize: isCompactHeight ? 18 : 22,
                   letterSpacing: 2.0,
                 ),
               );
@@ -542,34 +550,34 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
               children: [
                 Text(
                   isTamil ? 'சட்ட & கூட்டுறவு உதவி' : 'Legal & Governance Kiosk',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
-                    fontSize: 14,
+                    fontSize: isCompactHeight ? 13 : 14,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: isCompactHeight ? 1 : 2),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: isCompactHeight ? 1 : 2),
                       decoration: BoxDecoration(
                         color: _emerald,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         isTamil ? 'நிலையான பயன்முறை' : 'Standard Mode',
-                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                        style: TextStyle(color: Colors.white, fontSize: isCompactHeight ? 9 : 10),
                       ),
                     ),
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
                         isTamil ? 'தமிழ்' : 'English',
-                        style: TextStyle(color: _lightGreen.withValues(alpha: 0.8), fontSize: 11),
+                        style: TextStyle(color: _lightGreen.withValues(alpha: 0.8), fontSize: isCompactHeight ? 10 : 11),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -582,6 +590,8 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
           // Session Reset Button
           IconButton(
             tooltip: isTamil ? 'அமர்வு மீட்டமை (Reset)' : 'Reset Session',
+            padding: isCompactHeight ? EdgeInsets.zero : const EdgeInsets.all(8),
+            constraints: isCompactHeight ? const BoxConstraints(minWidth: 36, minHeight: 36) : null,
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: handlePhysicalResetPress,
           ),
@@ -590,26 +600,31 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     );
   }
 
-  Widget _buildLegalDisclaimer(bool isTamil) {
+  Widget _buildLegalDisclaimer(bool isTamil, {bool isCompactHeight = false}) {
     return Container(
       width: double.infinity,
       color: const Color(0xFFFFF9E6),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: isCompactHeight ? 4 : 8,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.gavel, size: 16, color: Color(0xFF8A6D3B)),
+          Icon(Icons.gavel, size: isCompactHeight ? 14 : 16, color: const Color(0xFF8A6D3B)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               isTamil
                   ? 'தகவல் அறிவிப்பு: CIVI கூட்டுறவு சட்டம் பற்றிய வழிகாட்டுதலை மட்டுமே வழங்குகிறது; இது சான்றளிக்கப்பட்ட வழக்கறிஞர் ஆலோசனை அல்ல.'
                   : 'Notice: CIVI provides informational legal guidance on cooperative governance, not certified legal counsel. Verify with official statutory gazettes.',
-              style: const TextStyle(
-                fontSize: 11,
-                color: Color(0xFF8A6D3B),
-                height: 1.3,
+              style: TextStyle(
+                fontSize: isCompactHeight ? 10 : 11,
+                color: const Color(0xFF8A6D3B),
+                height: isCompactHeight ? 1.2 : 1.3,
               ),
+              maxLines: isCompactHeight ? 2 : null,
+              overflow: isCompactHeight ? TextOverflow.ellipsis : TextOverflow.clip,
             ),
           ),
         ],
@@ -617,15 +632,23 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     );
   }
 
-  Widget _buildEmptyState(bool isTamil) {
+  Widget _buildEmptyState(bool isTamil, {bool isCompactHeight = false}) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: EdgeInsets.symmetric(
+          horizontal: 24.0,
+          vertical: isCompactHeight ? 8.0 : 24.0,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.chat_bubble_outline, size: 48, color: _emerald.withValues(alpha: 0.4)),
-            const SizedBox(height: 12),
+            Icon(
+              Icons.chat_bubble_outline,
+              size: isCompactHeight ? 32 : 48,
+              color: _emerald.withValues(alpha: 0.4),
+            ),
+            SizedBox(height: isCompactHeight ? 6 : 12),
             Text(
               isTamil
                   ? 'உரையாடல் மீட்டமைக்கப்பட்டது.\nகீழே தட்டச்சு செய்யவும் அல்லது கேள்வி கேட்க ஒலிவாங்கி (Mic) பொத்தானை அழுத்தவும்.'
@@ -633,8 +656,8 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.black.withValues(alpha: 0.5),
-                fontSize: 13,
-                height: 1.4,
+                fontSize: isCompactHeight ? 11.5 : 13,
+                height: isCompactHeight ? 1.3 : 1.4,
               ),
             ),
           ],
@@ -643,7 +666,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     );
   }
 
-  Widget _buildMessageItem(CiviChatMessage msg) {
+  Widget _buildMessageItem(CiviChatMessage msg, {bool isCompactHeight = false}) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isCompact = screenWidth < 400;
 
@@ -652,8 +675,8 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
         alignment: Alignment.centerRight,
         child: Container(
           constraints: BoxConstraints(maxWidth: screenWidth * 0.84),
-          margin: EdgeInsets.only(left: isCompact ? 20 : 40, bottom: 10),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          margin: EdgeInsets.only(left: isCompact ? 20 : 40, bottom: isCompactHeight ? 6 : 10),
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: isCompactHeight ? 8 : 12),
           decoration: BoxDecoration(
             color: _deepForest,
             borderRadius: const BorderRadius.only(
@@ -687,7 +710,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
                 ),
               Text(
                 msg.text,
-                style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.35),
+                style: TextStyle(color: Colors.white, fontSize: isCompactHeight ? 13 : 14, height: 1.35),
               ),
             ],
           ),
@@ -700,8 +723,8 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
       alignment: Alignment.centerLeft,
       child: Container(
         constraints: BoxConstraints(maxWidth: screenWidth * 0.88),
-        margin: EdgeInsets.only(right: isCompact ? 18 : 32, bottom: 12),
-        padding: const EdgeInsets.all(15),
+        margin: EdgeInsets.only(right: isCompact ? 18 : 32, bottom: isCompactHeight ? 8 : 12),
+        padding: EdgeInsets.all(isCompactHeight ? 11 : 15),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: const BorderRadius.only(
@@ -794,7 +817,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     );
   }
 
-  Widget _buildVoiceStatusBar(bool isTamil) {
+  Widget _buildVoiceStatusBar(bool isTamil, {bool isCompactHeight = false}) {
     Color barColor = _deepForest;
     IconData icon = Icons.radio_button_checked;
     String statusMessage = '';
@@ -842,25 +865,30 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
       child: Container(
         width: double.infinity,
         color: barColor,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: isCompactHeight ? 4 : 8,
+        ),
         child: Row(
           children: [
             if (_voiceStatus == VoiceHardwareStatus.recording)
               ScaleTransition(
                 scale: _pulseAnimation,
-                child: const Icon(Icons.fiber_manual_record, color: Colors.white, size: 16),
+                child: Icon(Icons.fiber_manual_record, color: Colors.white, size: isCompactHeight ? 14 : 16),
               )
             else
-              Icon(icon, color: Colors.white, size: 16),
-            const SizedBox(width: 10),
+              Icon(icon, color: Colors.white, size: isCompactHeight ? 14 : 16),
+            SizedBox(width: isCompactHeight ? 8 : 10),
             Expanded(
               child: Text(
                 statusMessage,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 12,
+                  fontSize: isCompactHeight ? 11.5 : 12,
                   fontWeight: FontWeight.w500,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -869,9 +897,12 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     );
   }
 
-  Widget _buildTextInputArea(bool isTamil) {
+  Widget _buildTextInputArea(bool isTamil, {bool isCompactHeight = false}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: isCompactHeight ? 4 : 8,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -889,8 +920,8 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
             onTap: handlePhysicalVoiceSelectorPress,
             borderRadius: BorderRadius.circular(20),
             child: Container(
-              width: 38,
-              height: 38,
+              width: isCompactHeight ? 32 : 38,
+              height: isCompactHeight ? 32 : 38,
               margin: const EdgeInsets.only(right: 8),
               decoration: BoxDecoration(
                 color: _voiceStatus == VoiceHardwareStatus.recording
@@ -914,7 +945,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
                         : 'Click to speak (Mic)'),
                 child: Icon(
                   _voiceStatus == VoiceHardwareStatus.recording ? Icons.mic : Icons.mic_none,
-                  size: 20,
+                  size: isCompactHeight ? 17 : 20,
                   color: _voiceStatus == VoiceHardwareStatus.recording
                       ? Colors.white
                       : _deepForest,
@@ -929,15 +960,19 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
               controller: _textController,
               focusNode: _inputFocusNode,
               onSubmitted: (_) => _handleSendTypedMessage(),
+              style: TextStyle(fontSize: isCompactHeight ? 12.5 : 13),
               decoration: InputDecoration(
                 hintText: isTamil
                     ? 'சட்டக் கேள்வியை இங்கே தட்டச்சு செய்யவும்...'
                     : 'Type your legal question here...',
                 hintStyle: TextStyle(
                   color: Colors.black.withValues(alpha: 0.4),
-                  fontSize: 13,
+                  fontSize: isCompactHeight ? 11.5 : 13,
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: isCompactHeight ? 6 : 12,
+                ),
                 filled: true,
                 fillColor: const Color(0xFFF1F5F4),
                 border: OutlineInputBorder(
@@ -951,8 +986,8 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
 
           // On-screen Send Button (No microphone or recording button allowed)
           SizedBox(
-            width: 44,
-            height: 44,
+            width: isCompactHeight ? 34 : 44,
+            height: isCompactHeight ? 34 : 44,
             child: ElevatedButton(
               onPressed: _handleSendTypedMessage,
               style: ElevatedButton.styleFrom(
@@ -962,7 +997,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
                 shape: const CircleBorder(),
                 elevation: 2,
               ),
-              child: const Icon(Icons.send, size: 18),
+              child: Icon(Icons.send, size: isCompactHeight ? 15 : 18),
             ),
           ),
         ],
@@ -1233,6 +1268,9 @@ class _VisuallyChallengedChatbotViewState
   @override
   Widget build(BuildContext context) {
     final isTamil = widget.language == CiviLanguage.tamil;
+    final mediaQuery = MediaQuery.of(context);
+    final isLandscape = mediaQuery.orientation == Orientation.landscape;
+    final isCompactHeight = isLandscape && mediaQuery.size.height < 500;
 
     return PopScope(
       // Intercept Android system back button / back gesture.
@@ -1249,25 +1287,25 @@ class _VisuallyChallengedChatbotViewState
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // 1. Top Header: Visually Challenged Mode & Status
-                  _buildAccessibleHeader(isTamil),
+                  _buildAccessibleHeader(isTamil, isCompactHeight: isCompactHeight),
 
                   // 2. Conversation Area (Natural conversational chat bubbles)
                   Expanded(
                     child: ListView.builder(
                       controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                      padding: EdgeInsets.symmetric(horizontal: 18, vertical: isCompactHeight ? 6 : 14),
                       itemCount: _messages.length,
                       itemBuilder: (context, index) {
-                        return _buildAccessibleMessageBubble(_messages[index]);
+                        return _buildAccessibleMessageBubble(_messages[index], isCompactHeight: isCompactHeight);
                       },
                     ),
                   ),
 
                   // 3. Hardware Voice Status Bar
-                  _buildAccessibleVoiceStatusBar(isTamil),
+                  _buildAccessibleVoiceStatusBar(isTamil, isCompactHeight: isCompactHeight),
 
                   // 4. Hardware Reference Guidance Cards (No text input in this mode)
-                  _buildAccessibleHardwareCards(isTamil),
+                  _buildAccessibleHardwareCards(isTamil, isCompactHeight: isCompactHeight),
                 ],
               ),
 
@@ -1285,9 +1323,12 @@ class _VisuallyChallengedChatbotViewState
     );
   }
 
-  Widget _buildAccessibleHeader(bool isTamil) {
+  Widget _buildAccessibleHeader(bool isTamil, {bool isCompactHeight = false}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: isCompactHeight ? 4 : 8,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFF16322C),
         border: Border(
@@ -1299,22 +1340,24 @@ class _VisuallyChallengedChatbotViewState
           // On-screen Back Button (same logic as physical BACK)
           IconButton(
             tooltip: isTamil ? 'பின்னால் (Back)' : 'Back',
+            padding: isCompactHeight ? EdgeInsets.zero : const EdgeInsets.all(8),
+            constraints: isCompactHeight ? const BoxConstraints(minWidth: 36, minHeight: 36) : null,
             icon: Icon(Icons.arrow_back_ios_new, color: _lightGreen, size: 20),
             onPressed: handlePhysicalBackPress,
           ),
 
-          // CIVI Brand Logo in accessible top-left header - noticeably enlarged and naturally blended
+          // CIVI Brand Logo in accessible top-left header - noticeably enlarged in portrait, scaled in landscape mobile
           Image.asset(
             'assets/images/civi_logo.png',
-            height: 48,
+            height: isCompactHeight ? 34 : 48,
             fit: BoxFit.contain,
             errorBuilder: (context, error, stackTrace) {
-              return const Text(
+              return Text(
                 'CIVI',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
-                  fontSize: 22,
+                  fontSize: isCompactHeight ? 18 : 22,
                   letterSpacing: 1.5,
                 ),
               );
@@ -1328,9 +1371,9 @@ class _VisuallyChallengedChatbotViewState
               children: [
                 Text(
                   isTamil ? 'பார்வைக் குறைபாடு பயன்முறை (Visually Challenged Mode)' : 'VISUALLY CHALLENGED MODE',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
-                    fontSize: 14,
+                    fontSize: isCompactHeight ? 12.5 : 14,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.6,
                   ),
@@ -1341,7 +1384,7 @@ class _VisuallyChallengedChatbotViewState
                   isTamil ? 'குரல்வழி சட்ட உதவி (Voice Legal Assistance)' : 'Voice-First Legal Assistance',
                   style: TextStyle(
                     color: _lightGreen.withValues(alpha: 0.85),
-                    fontSize: 11,
+                    fontSize: isCompactHeight ? 9.5 : 11,
                     fontWeight: FontWeight.w500,
                   ),
                   maxLines: 1,
@@ -1352,7 +1395,9 @@ class _VisuallyChallengedChatbotViewState
           ),
           IconButton(
             tooltip: isTamil ? 'அமர்வு மீட்டமை (Reset Session)' : 'Reset Session',
-            icon: const Icon(Icons.refresh, color: Colors.white, size: 24),
+            padding: isCompactHeight ? EdgeInsets.zero : const EdgeInsets.all(8),
+            constraints: isCompactHeight ? const BoxConstraints(minWidth: 36, minHeight: 36) : null,
+            icon: Icon(Icons.refresh, color: Colors.white, size: isCompactHeight ? 20 : 24),
             onPressed: handlePhysicalResetPress,
           ),
         ],
@@ -1362,14 +1407,14 @@ class _VisuallyChallengedChatbotViewState
 
   /// Builds natural conversational chat bubbles with large readable typography.
   /// Does not explicitly label messages as "Question", "Answer", "User Question" or "Bot Answer".
-  Widget _buildAccessibleMessageBubble(CiviChatMessage msg) {
+  Widget _buildAccessibleMessageBubble(CiviChatMessage msg, {bool isCompactHeight = false}) {
     if (msg.isUser) {
       // User chat bubble (speech-to-text converted question)
       return Align(
         alignment: Alignment.centerRight,
         child: Container(
-          margin: const EdgeInsets.only(left: 36, bottom: 14),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          margin: EdgeInsets.only(left: 36, bottom: isCompactHeight ? 8 : 14),
+          padding: EdgeInsets.symmetric(horizontal: 18, vertical: isCompactHeight ? 8 : 14),
           decoration: BoxDecoration(
             color: _deepForest,
             borderRadius: const BorderRadius.only(
@@ -1389,9 +1434,9 @@ class _VisuallyChallengedChatbotViewState
           ),
           child: Text(
             msg.text,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
-              fontSize: 18,
+              fontSize: isCompactHeight ? 15 : 18,
               fontWeight: FontWeight.w600,
               height: 1.4,
             ),
@@ -1404,8 +1449,8 @@ class _VisuallyChallengedChatbotViewState
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(right: 30, bottom: 16),
-        padding: const EdgeInsets.all(18),
+        margin: EdgeInsets.only(right: 30, bottom: isCompactHeight ? 8 : 16),
+        padding: EdgeInsets.all(isCompactHeight ? 12 : 18),
         decoration: BoxDecoration(
           color: const Color(0xFF1B3D35),
           borderRadius: const BorderRadius.only(
@@ -1453,9 +1498,9 @@ class _VisuallyChallengedChatbotViewState
             const SizedBox(height: 12),
             Text(
               msg.text,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
-                fontSize: 18,
+                fontSize: isCompactHeight ? 15 : 18,
                 fontWeight: FontWeight.w500,
                 height: 1.45,
               ),
@@ -1494,7 +1539,7 @@ class _VisuallyChallengedChatbotViewState
     );
   }
 
-  Widget _buildAccessibleVoiceStatusBar(bool isTamil) {
+  Widget _buildAccessibleVoiceStatusBar(bool isTamil, {bool isCompactHeight = false}) {
     Color barColor = _deepForest;
     IconData icon = Icons.hearing;
     String statusMessage = '';
@@ -1540,7 +1585,10 @@ class _VisuallyChallengedChatbotViewState
     return InkWell(
       onTap: handlePhysicalVoiceSelectorPress,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: isCompactHeight ? 5 : 10,
+        ),
         decoration: BoxDecoration(
           color: barColor,
           border: Border(
@@ -1552,19 +1600,21 @@ class _VisuallyChallengedChatbotViewState
             if (_voiceStatus == VoiceHardwareStatus.recording)
               ScaleTransition(
                 scale: _pulseAnimation,
-                child: const Icon(Icons.fiber_manual_record, color: Colors.white, size: 20),
+                child: Icon(Icons.fiber_manual_record, color: Colors.white, size: isCompactHeight ? 16 : 20),
               )
             else
-              Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
+              Icon(icon, color: Colors.white, size: isCompactHeight ? 16 : 20),
+            SizedBox(width: isCompactHeight ? 8 : 12),
             Expanded(
               child: Text(
                 statusMessage,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 14,
+                  fontSize: isCompactHeight ? 12 : 14,
                   fontWeight: FontWeight.w600,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -1573,10 +1623,13 @@ class _VisuallyChallengedChatbotViewState
     );
   }
 
-  Widget _buildAccessibleHardwareCards(bool isTamil) {
+  Widget _buildAccessibleHardwareCards(bool isTamil, {bool isCompactHeight = false}) {
     return Container(
       color: const Color(0xFF16322C),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: isCompactHeight ? 4 : 8,
+      ),
       child: Row(
         children: [
           // On-Screen Mic Button Card (Click to start/stop recording, synchronized with ESP32 button)
@@ -1585,7 +1638,10 @@ class _VisuallyChallengedChatbotViewState
               onTap: handlePhysicalVoiceSelectorPress,
               borderRadius: BorderRadius.circular(10),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: isCompactHeight ? 4 : 8,
+                ),
                 decoration: BoxDecoration(
                   color: _voiceStatus == VoiceHardwareStatus.recording
                       ? const Color(0xFF9E1B1B)
@@ -1603,7 +1659,7 @@ class _VisuallyChallengedChatbotViewState
                     Icon(
                       _voiceStatus == VoiceHardwareStatus.recording ? Icons.mic : Icons.mic_none,
                       color: _voiceStatus == VoiceHardwareStatus.recording ? Colors.white : _lightGreen,
-                      size: 16,
+                      size: isCompactHeight ? 14 : 16,
                     ),
                     const SizedBox(width: 4),
                     Flexible(
@@ -1613,7 +1669,11 @@ class _VisuallyChallengedChatbotViewState
                           _voiceStatus == VoiceHardwareStatus.recording
                               ? (isTamil ? 'நிறுத்து (Stop)' : 'STOP MIC')
                               : (isTamil ? 'பேசுக (Mic)' : 'MIC (Speak)'),
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: isCompactHeight ? 9.5 : 11,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
@@ -1630,7 +1690,10 @@ class _VisuallyChallengedChatbotViewState
               onTap: handlePhysicalRepeatVoicePress,
               borderRadius: BorderRadius.circular(10),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: isCompactHeight ? 4 : 8,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E433B),
                   borderRadius: BorderRadius.circular(10),
@@ -1639,14 +1702,18 @@ class _VisuallyChallengedChatbotViewState
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.replay, color: _lightGreen, size: 16),
+                    Icon(Icons.replay, color: _lightGreen, size: isCompactHeight ? 14 : 16),
                     const SizedBox(width: 4),
                     Flexible(
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
                           isTamil ? 'மீண்டும் ஒலி (Repeat Voice)' : 'REPEAT VOICE',
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: isCompactHeight ? 9.5 : 11,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
@@ -1663,7 +1730,10 @@ class _VisuallyChallengedChatbotViewState
               onTap: handlePhysicalBackPress,
               borderRadius: BorderRadius.circular(10),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: isCompactHeight ? 4 : 8,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E433B),
                   borderRadius: BorderRadius.circular(10),
@@ -1672,14 +1742,18 @@ class _VisuallyChallengedChatbotViewState
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.arrow_back, color: _lightGreen, size: 16),
+                    Icon(Icons.arrow_back, color: _lightGreen, size: isCompactHeight ? 14 : 16),
                     const SizedBox(width: 4),
                     Flexible(
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
                           isTamil ? 'பின்னால் (Back)' : 'BACK',
-                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: isCompactHeight ? 9.5 : 11,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
@@ -1747,13 +1821,22 @@ class _CiviListeningVisualState extends State<CiviListeningVisual>
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final isCompactHeight = mediaQuery.orientation == Orientation.landscape && mediaQuery.size.height < 500;
+
+    final visualContainerSize = isCompactHeight ? 96.0 : 150.0;
+    final ringBaseSize = isCompactHeight ? 56.0 : 86.0;
+    final glowSize = isCompactHeight ? 58.0 : 88.0;
+    final coreSize = isCompactHeight ? 50.0 : 76.0;
+    final micIconSize = isCompactHeight ? 26.0 : 38.0;
+
     final visualContent = Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: 150,
-            height: 150,
+            width: visualContainerSize,
+            height: visualContainerSize,
             child: AnimatedBuilder(
               animation: _waveController,
               builder: (context, child) {
@@ -1775,13 +1858,13 @@ class _CiviListeningVisualState extends State<CiviListeningVisual>
                     Transform.scale(
                       scale: wave1Scale,
                       child: Container(
-                        width: 86,
-                        height: 86,
+                        width: ringBaseSize,
+                        height: ringBaseSize,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: _emerald.withValues(alpha: wave1Opacity),
-                            width: 3.0,
+                            width: isCompactHeight ? 2.0 : 3.0,
                           ),
                         ),
                       ),
@@ -1790,36 +1873,36 @@ class _CiviListeningVisualState extends State<CiviListeningVisual>
                     Transform.scale(
                       scale: wave2Scale,
                       child: Container(
-                        width: 86,
-                        height: 86,
+                        width: ringBaseSize,
+                        height: ringBaseSize,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: _lightGreen.withValues(alpha: wave2Opacity),
-                            width: 2.0,
+                            width: isCompactHeight ? 1.5 : 2.0,
                           ),
                         ),
                       ),
                     ),
                     // Ambient emerald glow
                     Container(
-                      width: 88,
-                      height: 88,
+                      width: glowSize,
+                      height: glowSize,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
                             color: _emerald.withValues(alpha: 0.4),
-                            blurRadius: 22,
-                            spreadRadius: 4,
+                            blurRadius: isCompactHeight ? 14 : 22,
+                            spreadRadius: isCompactHeight ? 2 : 4,
                           ),
                         ],
                       ),
                     ),
                     // Center Mic Core Circle
                     Container(
-                      width: 76,
-                      height: 76,
+                      width: coreSize,
+                      height: coreSize,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: const LinearGradient(
@@ -1829,14 +1912,14 @@ class _CiviListeningVisualState extends State<CiviListeningVisual>
                         ),
                         border: Border.all(
                           color: _lightGreen,
-                          width: 2.5,
+                          width: isCompactHeight ? 2.0 : 2.5,
                         ),
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Icon(
                           Icons.mic,
                           color: Colors.white,
-                          size: 38,
+                          size: micIconSize,
                         ),
                       ),
                     ),
@@ -1845,10 +1928,13 @@ class _CiviListeningVisualState extends State<CiviListeningVisual>
               },
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: isCompactHeight ? 6 : 10),
           // Floating Status Pill Badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            padding: EdgeInsets.symmetric(
+              horizontal: isCompactHeight ? 10 : 14,
+              vertical: isCompactHeight ? 4 : 6,
+            ),
             decoration: BoxDecoration(
               color: _deepForest.withValues(alpha: 0.94),
               borderRadius: BorderRadius.circular(20),
@@ -1868,14 +1954,14 @@ class _CiviListeningVisualState extends State<CiviListeningVisual>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 8,
-                  height: 8,
+                  width: isCompactHeight ? 6 : 8,
+                  height: isCompactHeight ? 6 : 8,
                   decoration: const BoxDecoration(
                     color: Color(0xFFEF5350), // Recording indicator dot
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: isCompactHeight ? 6 : 8),
                 Text(
                   widget.isTamil
                       ? (widget.seconds != null && widget.seconds! > 0
@@ -1884,9 +1970,9 @@ class _CiviListeningVisualState extends State<CiviListeningVisual>
                       : (widget.seconds != null && widget.seconds! > 0
                           ? 'Listening (${widget.seconds}s)...'
                           : 'Listening...'),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
-                    fontSize: 12,
+                    fontSize: isCompactHeight ? 10.5 : 12,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.5,
                   ),

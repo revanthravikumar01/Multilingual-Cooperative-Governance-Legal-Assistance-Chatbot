@@ -201,8 +201,13 @@ class _AccessibilityConfirmationScreenState
     final panelWidth = isDesktop ? 460.0 : (size.width * 0.90).clamp(240.0, availableWidth < 400.0 ? availableWidth : 400.0);
     final isTamil = _language == CiviLanguage.tamil;
 
-    return Scaffold(
-      body: KeyboardListener(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) handlePhysicalBackPress();
+      },
+      child: Scaffold(
+        body: KeyboardListener(
         focusNode: _focusNode,
         autofocus: true,
         onKeyEvent: _handleKeyEvent,
@@ -223,12 +228,14 @@ class _AccessibilityConfirmationScreenState
             );
           },
           child: SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+            child: Stack(
+              children: [
+                Center(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                     // Spoken announcement banner (active when dedicated button is pressed)
                     if (_isAnnouncing)
                       Container(
@@ -258,19 +265,6 @@ class _AccessibilityConfirmationScreenState
                         ),
                       ),
 
-                    // On-screen BACK navigation control
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton.icon(
-                        onPressed: _isAnnouncing ? null : handlePhysicalBackPress,
-                        icon: const Icon(Icons.arrow_back, color: _lightGreen, size: 20),
-                        label: Text(
-                          isTamil ? 'மொழியை மாற்ற (BACK)' : 'Back to Language (BACK)',
-                          style: const TextStyle(color: _lightGreen, fontSize: 13),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
 
                     // Screen Question Heading
                     Text(
@@ -399,10 +393,28 @@ class _AccessibilityConfirmationScreenState
                 ),
               ),
             ),
-          ),
+
+            // Top-left back-navigation arrow (matching chatbot UI styling)
+            Positioned(
+              top: 8,
+              left: 8,
+              child: IconButton(
+                tooltip: isTamil ? 'பின்னால் (Back)' : 'Back',
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                onPressed: handlePhysicalBackPress,
+              ),
+            ),
+          ],
         ),
       ),
-    );
+    ),
+  ),
+),
+);
   }
 
   Widget _buildDynamicIslandPanel({
