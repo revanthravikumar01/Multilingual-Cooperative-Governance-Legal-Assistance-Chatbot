@@ -233,19 +233,68 @@ endpoint only reports state changes, such as language or mode, so Flutter can sh
 
 ---
 
-## Documents (admin, local network only), 🕓 Phase 2
+## Knowledge base (admin): Phase 2
 
-### 🕓 `POST /documents`
+These endpoints accept requests **only from the backend laptop itself** (Decision 30). Set
+`CIVI_ADMIN_ALLOW_LAN=true` to also allow devices on the private Wi-Fi. Any other device gets
+`403 forbidden`. The easiest way to use them is the browser page `http://127.0.0.1:8000/docs`.
 
-`multipart/form-data` with fields `file` (PDF), `title`, `issuing_authority`, `jurisdiction`
-(`tamil_nadu` | `central`), `doc_type` (`act` | `rules` | `scheme` | `guideline`), `published_on`.
-It is processed automatically (Decision 5). Response `202` returns `{ "document_id": "...", "status": "processing" }`.
+### ✅ `POST /documents`: upload an official PDF
 
-### 🕓 `GET /documents/{document_id}`
+`multipart/form-data`:
 
-This returns the processing status: `processing` | `ready` | `failed` | `duplicate`.
+| Field               | Required | Values                                                            |
+| ------------------- | -------- | ----------------------------------------------------------------- |
+| `file`              | yes      | PDF, ≤ 50 MB                                                      |
+| `title`             | yes      | Full official title                                               |
+| `citation_name`     | no       | Short name for citations (defaults to `title`)                    |
+| `issuing_authority` | yes      | e.g. `Government of Tamil Nadu`                                   |
+| `jurisdiction`      | yes      | `tamil_nadu` · `central`                                          |
+| `doc_type`          | yes      | `act` · `rules` · `scheme` · `guideline` · `circular` · `other`   |
+| `language`          | yes      | `en` · `ta` (the language the PDF is written in)                  |
+| `published_on`      | no       | `1983`, `1983-05` or `1983-05-21`                                 |
+| `validity`          | no       | `current` (default) · `superseded` · `unknown` (Decision 28)      |
 
-It is only accepted from the laptop itself or the trusted local network (Decision 30).
+Response `202`: the document record with `"status": "processing"`. Processing (text → chunks →
+embeddings → ChromaDB) runs right after the response (Decision 5).
+Errors: `400 invalid_pdf` (not a PDF, empty, password-protected, too large),
+`409 duplicate_document` (same file already uploaded; the message names the existing ID).
+
+### ✅ `GET /documents/{document_id}`
+
+This returns the record: `status` is `processing` · `ready` · `failed`, plus `page_count`, `chunk_count`,
+`warnings` (for example "looks like a scanned PDF" or "old non-Unicode Tamil font") and `error`.
+
+### ✅ `GET /documents`
+
+This returns `{ "documents": [...], "total_chunks": 123 }`.
+
+### ✅ `POST /search`: see which evidence a question retrieves (testing and tuning)
+
+```json
+{ "query": "How do I register a society?", "language": "en",
+  "jurisdiction": "tamil_nadu", "doc_type": "act", "topic": "registration" }
+```
+
+`jurisdiction`, `doc_type` and `topic` are optional filters. `topic` is one of `registration`, `membership`,
+`elections`, `governance`, `auditing`, `schemes`.
+
+```json
+{
+  "sufficient": true,
+  "evidence": [
+    { "chunk_id": "...", "text": "...", "score": 0.71, "similarity": 0.64,
+      "citation": { "number": 1, "label": "[1] TN Co-operative Societies Act, 1983, Section 4(1), Page 7", ... } }
+  ]
+}
+```
+
+`sufficient: false` with no evidence means "Verified information is not available" (Decision 9).
+
+For a Tamil question (`"language": "ta"`), the response also includes `translated_query` (the English
+translation from Sarvam that was searched). If translation failed after all retries (Decision 32), it includes
+`translation_error`, and only the Tamil text was searched, with a stricter threshold.
+Phase 3 uses this same retrieval inside `/chat`.
 
 ---
 

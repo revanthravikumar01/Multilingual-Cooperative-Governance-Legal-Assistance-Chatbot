@@ -7,7 +7,7 @@ This file only builds the app; the endpoints live in app/api/.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import chat, health, sessions
+from app.api import chat, documents, health, sessions
 from app.config import settings
 from app.errors import register_error_handlers
 
@@ -30,6 +30,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(sessions.router, prefix=API_PREFIX)
     app.include_router(chat.router, prefix=API_PREFIX)
+    app.include_router(documents.router, prefix=API_PREFIX)
     return app
 
 

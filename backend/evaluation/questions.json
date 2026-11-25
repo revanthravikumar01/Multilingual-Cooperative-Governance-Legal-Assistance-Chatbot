@@ -1,0 +1,48 @@
+{
+  "_about": "Retrieval test questions. 'expect' lists acceptable sources (document_id prefix + sections); the first is the best answer. Empty 'expect' means the question is out of scope and nothing should be found. Expected sections were checked against the PDF text on 2026-11-25. Run: python -m app.scripts.evaluate",
+  "questions": [
+    {"id": "tn-reg-signatures", "language": "en", "query": "How many persons must sign an application to register a cooperative society in Tamil Nadu?",
+     "expect": [{"doc": "tn-co-operative-societies-act-1983", "sections": ["8"]}, {"doc": "tn-co-operative-societies-rules-1988", "sections": ["3"]}]},
+    {"id": "tn-elections", "language": "en", "query": "Who conducts elections to cooperative societies in Tamil Nadu?",
+     "expect": [{"doc": "tn-co-operative-societies-act-1983", "sections": ["33-A"]}, {"doc": "tn-co-operative-societies-rules-1988", "sections": ["52-A"]}]},
+    {"id": "tn-expulsion", "language": "en", "jurisdiction": "tamil_nadu", "query": "On what grounds can a member be expelled from a society?",
+     "expect": [{"doc": "tn-co-operative-societies-act-1983", "sections": ["25"]}]},
+    {"id": "tn-board-disqualification", "language": "en", "jurisdiction": "tamil_nadu", "query": "Who is disqualified from becoming a member of the board of a society?",
+     "expect": [{"doc": "tn-co-operative-societies-act-1983", "sections": ["34", "36", "36-A"]}]},
+    {"id": "tn-audit", "language": "en", "jurisdiction": "tamil_nadu", "query": "Who audits the accounts of a registered cooperative society?",
+     "expect": [{"doc": "tn-co-operative-societies-act-1983", "sections": ["80"]}, {"doc": "tn-co-operative-societies-rules-1988", "sections": ["101-A"]}]},
+    {"id": "tn-associate-members", "language": "en", "jurisdiction": "tamil_nadu", "query": "How are associate members admitted to a society?",
+     "expect": [{"doc": "tn-co-operative-societies-rules-1988", "sections": ["32"]}]},
+    {"id": "tn-membership-qualification", "language": "en", "jurisdiction": "tamil_nadu", "query": "What qualifications are needed to become a member of a cooperative society?",
+     "expect": [{"doc": "tn-co-operative-societies-act-1983", "sections": ["21"]}]},
+    {"id": "tn-votes", "language": "en", "jurisdiction": "tamil_nadu", "query": "How many votes does each member of a society have?",
+     "expect": [{"doc": "tn-co-operative-societies-act-1983", "sections": ["26"]}]},
+    {"id": "tn-md-qualification", "language": "en", "query": "What qualifications are required to be appointed Managing Director of an apex cooperative society?",
+     "expect": [{"doc": "tn-co-operative-societies-rules-1988", "sections": ["145"]}]},
+    {"id": "tn-section-ref", "language": "en", "query": "What does section 33-A of the Tamil Nadu Co-operative Societies Act say?",
+     "expect": [{"doc": "tn-co-operative-societies-act-1983", "sections": ["33-A"]}]},
+
+    {"id": "ms-central-registrar", "language": "en", "query": "Who is the Central Registrar of multi-state cooperative societies?",
+     "expect": [{"doc": "multi-state-co-operative-societies-act-2002", "sections": ["4"]}]},
+    {"id": "ms-registration-persons", "language": "en", "jurisdiction": "central", "query": "How many persons are required to apply for registration of a multi-state cooperative society?",
+     "expect": [{"doc": "multi-state-co-operative-societies-act-2002", "sections": ["6"]}]},
+    {"id": "ms-member-disqualification", "language": "en", "jurisdiction": "central", "query": "When is a person disqualified from being a member of a multi-state cooperative society?",
+     "expect": [{"doc": "multi-state-co-operative-societies-act-2002", "sections": ["29"]}]},
+    {"id": "ms-auditors", "language": "en", "jurisdiction": "central", "query": "How are auditors of a multi-state cooperative society appointed?",
+     "expect": [{"doc": "multi-state-co-operative-societies-act-2002", "sections": ["70"]}]},
+
+    {"id": "ta-reg-signatures", "language": "ta", "query": "தமிழ்நாட்டில் கூட்டுறவு சங்கத்தைப் பதிவு செய்ய விண்ணப்பத்தில் எத்தனை நபர்கள் கையெழுத்திட வேண்டும்?",
+     "expect": [{"doc": "tn-co-operative-societies-act-1983", "sections": ["8"]}, {"doc": "tn-co-operative-societies-rules-1988", "sections": ["3"]}]},
+    {"id": "ta-elections", "language": "ta", "query": "தமிழ்நாட்டில் கூட்டுறவு சங்கத் தேர்தல்களை யார் நடத்துகிறார்கள்?",
+     "expect": [{"doc": "tn-co-operative-societies-act-1983", "sections": ["33-A"]}, {"doc": "tn-co-operative-societies-rules-1988", "sections": ["52-A"]}]},
+    {"id": "ta-expulsion", "language": "ta", "jurisdiction": "tamil_nadu", "query": "ஒரு உறுப்பினரை சங்கத்திலிருந்து எந்தக் காரணங்களுக்காக நீக்கலாம்?",
+     "expect": [{"doc": "tn-co-operative-societies-act-1983", "sections": ["25"]}]},
+    {"id": "ta-audit", "language": "ta", "jurisdiction": "tamil_nadu", "query": "பதிவு செய்யப்பட்ட கூட்டுறவு சங்கத்தின் கணக்குகளை யார் தணிக்கை செய்கிறார்கள்?",
+     "expect": [{"doc": "tn-co-operative-societies-act-1983", "sections": ["80"]}, {"doc": "tn-co-operative-societies-rules-1988", "sections": ["101-A"]}]},
+
+    {"id": "oos-cricket", "language": "en", "query": "Who won the cricket world cup?", "expect": []},
+    {"id": "oos-france", "language": "en", "query": "What is the capital of France?", "expect": []},
+    {"id": "oos-passport", "language": "en", "query": "How do I apply for an Indian passport?", "expect": []},
+    {"id": "oos-tamil-weather", "language": "ta", "query": "இன்று சென்னையில் வானிலை எப்படி இருக்கும்?", "expect": []}
+  ]
+}
