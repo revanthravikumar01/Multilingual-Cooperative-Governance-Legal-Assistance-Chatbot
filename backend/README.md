@@ -1,6 +1,21 @@
 # CIVI FastAPI backend (Phase 1)
 
-This is the temporary text-only API foundation. It intentionally does **not** include RAG, Gemini, speech processing, text-to-speech, or ESP32 support.
+Modular FastAPI foundation with temporary in-memory sessions. Answers are still placeholders: RAG, Gemini, Sarvam speech and ESP32 support come in later phases.
+
+The full endpoint list (implemented and planned) is in [API_CONTRACT.md](API_CONTRACT.md).
+
+## Folder layout
+
+```
+main.py                  builds the app and registers routes
+app/config.py            settings from .env
+app/errors.py            one error format for every endpoint
+app/dependencies.py      shared objects (the session store)
+app/api/                 endpoints: health, sessions, chat
+app/models/              request/response shapes
+app/services/            logic: session_service (memory + 30-min expiry), answer_service (placeholder)
+tests/                   automated tests
+```
 
 ## Run on the laptop
 
@@ -37,4 +52,11 @@ Do not use `127.0.0.1` or `localhost` on a physical phone: they refer to the pho
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/chat -ContentType 'application/json' -Body '{"message":"What is a cooperative society?","language":"en"}'
 ```
 
-The chat reply is deliberately labelled as temporary. Later phases should replace only the `chat()` answer generation while keeping this endpoint contract.
+The chat reply is deliberately labelled as temporary. Phases 2–3 replace only `app/services/answer_service.py`; the endpoint contract stays the same.
+
+## Run the tests
+
+```powershell
+python -m pip install -r requirements-dev.txt
+python -m pytest
+```
