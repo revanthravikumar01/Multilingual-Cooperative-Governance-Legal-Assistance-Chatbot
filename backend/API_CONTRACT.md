@@ -122,9 +122,11 @@ Flutter keeps the highest `seq` it has seen and sends it next time.
 
 `source` is `"text"` (typed in Flutter) or `"voice"` (spoken at the ESP32).
 
-### 🕓 `GET /kiosks/{kiosk_id}/session` (Phase 7)
+### ✅ `GET /kiosks/{kiosk_id}/session`
 
 The ESP32 calls this to find the kiosk's active session. It returns the session body, or `404` if there is none.
+The Flutter app starts each conversation with `POST /sessions` and `"kiosk_id"` (default `kiosk-1`, set with
+`--dart-define=CIVI_KIOSK_ID=...`); a new conversation replaces the kiosk's previous one. Does not refresh the timer.
 
 ---
 

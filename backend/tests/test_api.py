@@ -130,3 +130,17 @@ def test_history_is_capped(service):
     messages = service.messages_after(session.session_id)
     assert len(messages) == 40
     assert messages[-1].seq == 50
+
+
+# ---------- kiosk ----------
+
+
+def test_kiosk_session_lookup(client):
+    assert client.get(f"{API}/kiosks/kiosk-1/session").status_code == 404
+    first = client.post(f"{API}/sessions", json={"language": "ta", "kiosk_id": "kiosk-1"}).json()
+    found = client.get(f"{API}/kiosks/kiosk-1/session").json()
+    assert found["session_id"] == first["session_id"] and found["language"] == "ta"
+    # A new conversation at the kiosk replaces the old one.
+    second = client.post(f"{API}/sessions", json={"language": "en", "kiosk_id": "kiosk-1"}).json()
+    assert client.get(f"{API}/kiosks/kiosk-1/session").json()["session_id"] == second["session_id"]
+    assert client.get(f"{API}/sessions/{first['session_id']}").status_code == 404

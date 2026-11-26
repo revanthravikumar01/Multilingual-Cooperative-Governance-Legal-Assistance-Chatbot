@@ -67,3 +67,16 @@ def list_messages(
             for m in messages
         ],
     )
+
+
+kiosk_router = APIRouter(prefix="/kiosks", tags=["sessions"])
+
+
+@kiosk_router.get("/{kiosk_id}/session", response_model=SessionResponse)
+def get_kiosk_session(kiosk_id: str, service: SessionService = Depends(get_session_service)) -> SessionResponse:
+    """The kiosk's active conversation (started by the Flutter app with this kiosk_id).
+
+    The ESP32 calls this to know which session to send voice questions to. 404 if there is none.
+    Does not refresh the session timer.
+    """
+    return to_session_response(service.get_for_kiosk(kiosk_id), service)

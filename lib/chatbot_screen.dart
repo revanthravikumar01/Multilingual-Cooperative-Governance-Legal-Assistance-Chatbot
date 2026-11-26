@@ -3,37 +3,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'language_selection_screen.dart';
 import 'accessibility_confirmation_screen.dart';
-import 'services/civi_api_service.dart';
+import 'services/civi_conversation.dart';
 
-/// Models a message in the CIVI legal conversation.
-class CiviChatMessage {
-  final String text;
-  final bool isUser;
-  final bool isVoice;
-  final String? sourceReference;
-
-  /// Source labels from the backend, e.g. "[1] TN Co-operative Societies Act, 1983, Section 34, Page 18".
-  final List<String> citations;
-  final DateTime timestamp;
-
-  const CiviChatMessage({
-    required this.text,
-    required this.isUser,
-    this.isVoice = false,
-    this.sourceReference,
-    this.citations = const [],
-    required this.timestamp,
-  });
-}
-
-/// Represents the hardware voice interaction state.
-enum VoiceHardwareStatus {
-  idle,
-  recording,
-  processing,
-  speaking,
-  replaying,
-}
+export 'services/civi_conversation.dart' show CiviChatMessage, VoiceHardwareStatus;
 
 /// Main Chatbot Screen for CIVI.
 /// Dispatches between Standard Mode and Visually Challenged Mode based on navigation parameters.
@@ -101,20 +73,19 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
   static const Color _emerald = Color(0xFF329881);
   static const Color _lightGreen = Color(0xFFEEF6F2);
 
-  final List<CiviChatMessage> _messages = [];
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _inputFocusNode = FocusNode();
 
-  /// Remembers the backend session so follow-up questions keep their context.
-  final CiviApiService _api = CiviApiService();
-  bool _isWaitingForAnswer = false;
-
-  VoiceHardwareStatus _voiceStatus = VoiceHardwareStatus.idle;
-  int _recordingSeconds = 0;
-  Timer? _recordingTimer;
-  Timer? _statusTransitionTimer;
+  /// Backend session, messages (typed here or spoken at the kiosk) and voice.
+  late final CiviConversation _conversation;
+  int _shownMessages = 0;
   bool _isSessionReset = false;
+
+  List<CiviChatMessage> get _messages => _conversation.messages;
+  VoiceHardwareStatus get _voiceStatus => _conversation.status;
+  int get _recordingSeconds => _conversation.recordingSeconds;
+  bool get _isWaitingForAnswer => _conversation.waitingForAnswer;
 
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -122,9 +93,16 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
   @override
   void initState() {
     super.initState();
-    // Register global hardware keyboard shortcut handler for persistent M, R, B responses
+    // Register global hardware keyboard shortcut handler for persistent M, R, C, B responses
     HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
-    _loadInitialSampleConversation();
+
+    _conversation = CiviConversation(
+      language: widget.language == CiviLanguage.tamil ? 'ta' : 'en',
+      speakTypedAnswers: false, // Standard mode: typed questions get text answers (Decision 14)
+    )
+      ..onNotice = _showNotice
+      ..addListener(_onConversationChanged);
+    _conversation.start();
 
     _pulseController = AnimationController(
       vsync: this,
@@ -139,8 +117,8 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
-    _recordingTimer?.cancel();
-    _statusTransitionTimer?.cancel();
+    _conversation.removeListener(_onConversationChanged);
+    _conversation.dispose();
     _textController.dispose();
     _scrollController.dispose();
     _inputFocusNode.dispose();
@@ -148,79 +126,50 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     super.dispose();
   }
 
-  void _loadInitialSampleConversation() {
-    final isTamil = widget.language == CiviLanguage.tamil;
-    _messages.clear();
-    _messages.add(
-      CiviChatMessage(
-        text: isTamil
-            ? 'வேளாண் கூட்டுறவு சங்கத்தில் உறுப்பினராக சேர தேவையான தகுதிகள் என்ன?'
-            : 'What are the key qualifications required to become a member of an agricultural cooperative society?',
-        isUser: true,
-        timestamp: DateTime.now().subtract(const Duration(minutes: 2)),
-      ),
-    );
-    _messages.add(
-      CiviChatMessage(
-        text: isTamil
-            ? 'தமிழ்நாடு கூட்டுறவு சங்கங்கள் சட்டம் 1983, பிரிவு 21-ன் படி முக்கிய தகுதிகள்:\n\n'
-                '• **வயது & வசிப்பிடம்:** 18 வயது பூர்த்தியடைந்தவராகவும், சங்கத்தின் செயல்பாட்டு எல்லைக்குள் வசிப்பவராகவும் இருக்க வேண்டும்.\n'
-                '• **விவசாய நிலம்:** சங்க எல்லைக்குள் விவசாய நிலம் சொந்தமாக வைத்திருக்க வேண்டும் அல்லது விவசாயத் தொழில் செய்பவராக இருக்க வேண்டும்.\n'
-                '• **தகுதியின்மை:** நொடிப்புநிலை அடையாதவராகவும், குற்றவியல் வழக்குகளில் தண்டனை பெறாதவராகவும் இருத்தல் வேண்டும்.\n\n'
-                '*குறிப்பு: விண்ணப்பம் சமர்ப்பித்த 60 நாட்களுக்குள் சங்கம் உரிய முடிவை அறிவிக்க வேண்டும்.*'
-            : 'Under Section 21 of the Tamil Nadu Cooperative Societies Act, 1983, primary qualifications include:\n\n'
-                '• **Age & Residency:** Individual must have completed 18 years of age and reside within the society’s registered area of operation.\n'
-                '• **Agricultural Activity:** Must hold agricultural land or actively carry on agricultural operations within the operational limits.\n'
-                '• **Disqualifications:** Must not be an undischarged insolvent or convicted of criminal offenses involving moral turpitude.\n\n'
-                '*Statutory Note: The managing committee must dispose of membership applications within 60 days of receipt.*',
-        isUser: false,
-        sourceReference: isTamil
-            ? 'தமிழ்நாடு கூட்டுறவு சங்கங்கள் சட்டம், 1983 — பிரிவு 21, பக்கம் 45'
-            : 'Tamil Nadu Cooperative Societies Act, 1983 — Section 21, Page 45',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
-      ),
-    );
-    _isSessionReset = false;
-  }
-
-  // ---------------------------------------------------------------------------
-  // PHYSICAL HARDWARE BUTTON HOOKS (Ready for ESP32 event integration)
-  // ---------------------------------------------------------------------------
-
-  /// Hook for physical button 6: VOICE SELECTOR
-  /// 1st Press: Starts recording.
-  /// 2nd Press: Stops and submits voice question.
-  void handlePhysicalVoiceSelectorPress() {
-    if (_voiceStatus == VoiceHardwareStatus.idle) {
-      _startVoiceRecording();
-    } else if (_voiceStatus == VoiceHardwareStatus.recording) {
-      _stopAndSubmitVoiceRecording();
+  void _onConversationChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (_messages.isNotEmpty) _isSessionReset = false;
+    });
+    // New messages (including questions asked at the kiosk) scroll into view.
+    if (_messages.length != _shownMessages || _isWaitingForAnswer) {
+      _shownMessages = _messages.length;
+      _scrollToBottom();
     }
   }
 
-  /// Hook for physical button 5: REPEAT VOICE
-  /// Replays the latest CIVI bot answer (never the user question).
-  void handlePhysicalRepeatVoicePress() {
-    final int index = _messages.lastIndexWhere((m) => !m.isUser);
-    if (index == -1) return;
-
-    final latestBotAnswer = _messages[index];
-    if (latestBotAnswer.text.isEmpty) return;
-
-    setState(() {
-      _voiceStatus = VoiceHardwareStatus.replaying;
-    });
-
-    _statusTransitionTimer?.cancel();
-    _statusTransitionTimer = Timer(const Duration(milliseconds: 3200), () {
-      if (!mounted) return;
-      setState(() {
-        _voiceStatus = VoiceHardwareStatus.idle;
-      });
-    });
+  void _showNotice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: _deepForest,
+        content: Text(message, style: const TextStyle(color: _lightGreen)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
-  /// Hook for physical button 4: BACK
+  // ---------------------------------------------------------------------------
+  // PHYSICAL HARDWARE BUTTON HOOKS (keyboard stands in for the ESP32 buttons)
+  // ---------------------------------------------------------------------------
+
+  /// Hook for physical button: MICROPHONE
+  /// 1st press: starts recording (stops any answer being spoken).
+  /// 2nd press: stops and submits the voice question.
+  void handlePhysicalVoiceSelectorPress() {
+    _inputFocusNode.unfocus();
+    _conversation.micPressed();
+  }
+
+  /// Hook for physical button: REPEAT VOICE
+  /// Replays the last spoken answer (never the user question).
+  void handlePhysicalRepeatVoicePress() => _conversation.repeat();
+
+  /// Hook for physical button: CONFIRM
+  /// Speaks the complete latest answer instead of the short summary (Decision 24).
+  void handlePhysicalConfirmPress() => _conversation.confirmFullAnswer();
+
+  /// Hook for physical button: BACK
   /// 1st Press: Resets active session and conversation.
   /// 2nd Press (when already reset): Navigates back to Accessibility Confirmation screen.
   void handlePhysicalBackPress() {
@@ -241,16 +190,12 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     );
   }
 
-  /// Hook for Session Reset.
+  /// Hook for Session Reset: ends the backend session and starts a new one.
   void handlePhysicalResetPress() {
     _inputFocusNode.unfocus();
-    _api.resetSession();
+    _textController.clear();
+    _conversation.reset();
     setState(() {
-      _messages.clear();
-      _textController.clear();
-      _voiceStatus = VoiceHardwareStatus.idle;
-      _recordingTimer?.cancel();
-      _statusTransitionTimer?.cancel();
       _isSessionReset = true;
     });
 
@@ -268,161 +213,14 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     );
   }
 
-  void _startVoiceRecording() {
-    _inputFocusNode.unfocus();
-    _statusTransitionTimer?.cancel();
-    setState(() {
-      _voiceStatus = VoiceHardwareStatus.recording;
-      _recordingSeconds = 0;
-    });
-
-    _recordingTimer?.cancel();
-    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        _recordingSeconds++;
-      });
-    });
-  }
-
-  void _stopAndSubmitVoiceRecording() {
-    _recordingTimer?.cancel();
-    setState(() {
-      _voiceStatus = VoiceHardwareStatus.processing;
-    });
-
-    final isTamil = widget.language == CiviLanguage.tamil;
-
-    // Simulate voice question processing and answer retrieval
-    _statusTransitionTimer = Timer(const Duration(milliseconds: 1800), () {
-      if (!mounted) return;
-
-      final voiceUserQuestion = CiviChatMessage(
-        text: isTamil
-            ? 'கூட்டுறவு சங்க நிர்வாகக் குழுவின் பணிக்காலம் எவ்வளவு?'
-            : 'What is the tenure of the elected managing committee in a cooperative society?',
-        isUser: true,
-        isVoice: true,
-        timestamp: DateTime.now(),
-      );
-
-      final voiceBotAnswer = CiviChatMessage(
-        text: isTamil
-            ? 'தமிழ்நாடு கூட்டுறவு சங்கங்கள் சட்டம் 1983, பிரிவு 33-ன் படி:\n\n'
-                '• தேர்ந்தெடுக்கப்பட்ட நிர்வாகக் குழுவின் பதவிக்காலம் அதன் முதல் கூட்ட தேதியிலிருந்து **ஐந்து ஆண்டுகள் (5 Years)** ஆகும்.\n'
-                '• பதவிக்காலம் முடிவடைவதற்கு முன் புதிய குழுவிற்கான தேர்தல் முறையாக நடத்தப்பட வேண்டும்.'
-            : 'Under Section 33 of the Tamil Nadu Cooperative Societies Act, 1983:\n\n'
-                '• The term of office of the elected members of the board shall be **five years (5 Years)** from the date of election.\n'
-                '• Fresh elections must be conducted before the expiration of the current committee’s tenure.',
-        isUser: false,
-        isVoice: true,
-        sourceReference: isTamil
-            ? 'தமிழ்நாடு கூட்டுறவு சங்கங்கள் சட்டம், 1983 — பிரிவு 33, பக்கம் 68'
-            : 'Tamil Nadu Cooperative Societies Act, 1983 — Section 33, Page 68',
-        timestamp: DateTime.now(),
-      );
-
-      setState(() {
-        _messages.add(voiceUserQuestion);
-        _messages.add(voiceBotAnswer);
-        _isSessionReset = false;
-        _voiceStatus = VoiceHardwareStatus.speaking;
-      });
-
-      _scrollToBottom();
-
-      // Automatically speak the voice question's answer, then return to idle
-      _statusTransitionTimer = Timer(const Duration(milliseconds: 3500), () {
-        if (!mounted) return;
-        setState(() {
-          _voiceStatus = VoiceHardwareStatus.idle;
-        });
-      });
-    });
-  }
-
   Future<void> _handleSendTypedMessage() async {
     final text = _textController.text.trim();
     // One question at a time, so answers can't arrive out of order.
     if (text.isEmpty || _isWaitingForAnswer) return;
-
-    final isTamil = widget.language == CiviLanguage.tamil;
-
-    setState(() {
-      _isWaitingForAnswer = true;
-      _messages.add(
-        CiviChatMessage(
-          text: text,
-          isUser: true,
-          isVoice: false,
-          timestamp: DateTime.now(),
-        ),
-      );
-      _isSessionReset = false;
-      _textController.clear();
-    });
-
-    // Unfocus text input so keyboard shortcuts (M, R, B) become active immediately
+    _textController.clear();
+    // Unfocus text input so keyboard shortcuts (M, R, C, B) become active immediately
     _inputFocusNode.unfocus();
-
-    _scrollToBottom();
-
-    try {
-      final response = await _api.sendTextMessage(
-        message: text,
-        language: isTamil ? 'ta' : 'en',
-      );
-      if (!mounted) return;
-      setState(() {
-        _messages.add(
-          CiviChatMessage(
-            text: response.answer,
-            isUser: false,
-            isVoice: false,
-            citations: response.citations,
-            timestamp: DateTime.now(),
-          ),
-        );
-      });
-    } on CiviApiException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _messages.add(
-          CiviChatMessage(
-            text: isTamil
-                ? 'சேவையகத்துடன் இணைக்க முடியவில்லை: ${error.message}'
-                : 'Unable to connect to the CIVI server: ${error.message}',
-            isUser: false,
-            isVoice: false,
-            timestamp: DateTime.now(),
-          ),
-        );
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _messages.add(
-          CiviChatMessage(
-            text: isTamil
-                ? 'சேவையகத்தை அணுக முடியவில்லை. Wi-Fi இணைப்பு மற்றும் சேவையகத்தின் முகவரியைச் சரிபார்க்கவும்.'
-                : 'Unable to reach the CIVI server. Check the Wi-Fi connection and server address.',
-            isUser: false,
-            isVoice: false,
-            timestamp: DateTime.now(),
-          ),
-        );
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isWaitingForAnswer = false;
-        });
-      }
-    }
-    _scrollToBottom();
+    await _conversation.sendText(text);
   }
 
   void _scrollToBottom() {
@@ -459,6 +257,9 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
         handlePhysicalRepeatVoicePress();
         return true;
       }
+    } else if (event.logicalKey == LogicalKeyboardKey.keyC) {
+      handlePhysicalConfirmPress();
+      return true;
     } else if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.keyB) {
       handlePhysicalBackPress();
@@ -697,9 +498,17 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
             ),
             SizedBox(height: isCompactHeight ? 6 : 12),
             Text(
-              isTamil
-                  ? 'உரையாடல் மீட்டமைக்கப்பட்டது.\nகீழே தட்டச்சு செய்யவும் அல்லது கேள்வி கேட்க ஒலிவாங்கி (Mic) பொத்தானை அழுத்தவும்.'
-                  : 'Session is clear.\nType your question below or press the Mic button to speak.',
+              _isSessionReset
+                  ? (isTamil
+                      ? 'உரையாடல் மீட்டமைக்கப்பட்டது.\nகீழே தட்டச்சு செய்யவும் அல்லது கேள்வி கேட்க ஒலிவாங்கி (Mic) பொத்தானை அழுத்தவும்.'
+                      : 'Session is clear.\nType your question below or press the Mic button to speak.')
+                  : (isTamil
+                      ? 'வணக்கம்! கூட்டுறவுச் சங்கங்கள் பற்றிக் கேளுங்கள்: பதிவு, உறுப்பினர், தேர்தல், கூட்டங்கள், தணிக்கை, நிர்வாகம்.\n'
+                          'பதில்கள் சட்ட ஆவணங்களிலிருந்து மட்டுமே, மூலங்களுடன் வழங்கப்படும்.\n\n'
+                          'கீழே தட்டச்சு செய்யவும் அல்லது ஒலிவாங்கி (Mic) பொத்தானை அழுத்திப் பேசவும்.'
+                      : 'Welcome! Ask about co-operative societies: registration, membership, elections, meetings, '
+                          'audit or management.\nAnswers come only from the official legal documents, with sources.\n\n'
+                          'Type your question below or press the Mic button to speak.'),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.black.withValues(alpha: 0.5),
@@ -1208,13 +1017,16 @@ class _VisuallyChallengedChatbotViewState
   static const Color _emerald = Color(0xFF329881);
   static const Color _lightGreen = Color(0xFFEEF6F2);
 
-  final List<CiviChatMessage> _messages = [];
   final ScrollController _scrollController = ScrollController();
 
-  VoiceHardwareStatus _voiceStatus = VoiceHardwareStatus.idle;
-  int _recordingSeconds = 0;
-  Timer? _recordingTimer;
-  Timer? _statusTransitionTimer;
+  /// Backend session, messages (spoken here or at the kiosk) and voice. Every answer is spoken.
+  late final CiviConversation _conversation;
+  int _shownMessages = 0;
+
+  /// A fixed welcome hint shown first (not legal content), followed by the real conversation.
+  List<CiviChatMessage> get _messages => [_welcomeMessage(), ..._conversation.messages];
+  VoiceHardwareStatus get _voiceStatus => _conversation.status;
+  int get _recordingSeconds => _conversation.recordingSeconds;
 
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -1222,9 +1034,16 @@ class _VisuallyChallengedChatbotViewState
   @override
   void initState() {
     super.initState();
-    // Register global hardware keyboard shortcut handler for persistent M, R, B responses
+    // Register global hardware keyboard shortcut handler for persistent M, R, C, B responses
     HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
-    _loadInitialConversation();
+
+    _conversation = CiviConversation(
+      language: widget.language == CiviLanguage.tamil ? 'ta' : 'en',
+      speakTypedAnswers: true, // Visually challenged mode: every answer is spoken (Decision 14)
+    )
+      ..onNotice = _showNotice
+      ..addListener(_onConversationChanged);
+    _conversation.start();
 
     _pulseController = AnimationController(
       vsync: this,
@@ -1236,29 +1055,46 @@ class _VisuallyChallengedChatbotViewState
     );
   }
 
-  void _loadInitialConversation() {
+  CiviChatMessage _welcomeMessage() {
     final isTamil = widget.language == CiviLanguage.tamil;
-    _messages.clear();
-    _messages.add(
-      CiviChatMessage(
-        text: isTamil
-            ? 'வணக்கம்! CIVI குரல்வழியாக உதவ தயாராக உள்ளது.\n\nகேள்வி கேட்க: பேசத் தொடங்குங்கள் (Start Speaking) – ஒலிவாங்கி (Mic) பொத்தானை அல்லது "M" விசையை அழுத்தவும்.'
-            : 'Welcome! CIVI Voice Assistant is ready.\n\nTo ask a question: Start Speaking – Press the Mic button or the "M" key to speak.',
-        isUser: false,
-        isVoice: true,
-        timestamp: DateTime.now(),
-      ),
+    return CiviChatMessage(
+      text: isTamil
+          ? 'வணக்கம்! CIVI குரல்வழியாக உதவ தயாராக உள்ளது.\n\nகேள்வி கேட்க: பேசத் தொடங்குங்கள் (Start Speaking) – ஒலிவாங்கி (Mic) பொத்தானை அல்லது "M" விசையை அழுத்தவும்.'
+          : 'Welcome! CIVI Voice Assistant is ready.\n\nTo ask a question: Start Speaking – Press the Mic button or the "M" key to speak.',
+      isUser: false,
+      isVoice: true,
+      timestamp: DateTime.now(),
     );
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
-    _recordingTimer?.cancel();
-    _statusTransitionTimer?.cancel();
+    _conversation.removeListener(_onConversationChanged);
+    _conversation.dispose();
     _scrollController.dispose();
     _pulseController.dispose();
     super.dispose();
+  }
+
+  void _onConversationChanged() {
+    if (!mounted) return;
+    setState(() {});
+    if (_conversation.messages.length != _shownMessages) {
+      _shownMessages = _conversation.messages.length;
+      _scrollToBottom();
+    }
+  }
+
+  void _showNotice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: _deepForest,
+        content: Text(message, style: const TextStyle(color: _lightGreen)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _scrollToBottom() {
@@ -1274,41 +1110,20 @@ class _VisuallyChallengedChatbotViewState
   }
 
   // ---------------------------------------------------------------------------
-  // PHYSICAL HARDWARE BUTTON HOOKS (Ready for ESP32 event integration)
+  // PHYSICAL HARDWARE BUTTON HOOKS (keyboard stands in for the ESP32 buttons)
   // ---------------------------------------------------------------------------
 
-  /// Hook for physical button 6: VOICE SELECTOR
-  void handlePhysicalVoiceSelectorPress() {
-    if (_voiceStatus == VoiceHardwareStatus.idle) {
-      _startVoiceRecording();
-    } else if (_voiceStatus == VoiceHardwareStatus.recording) {
-      _stopAndSubmitVoiceRecording();
-    }
-  }
+  /// Hook for physical button: MICROPHONE (first press records, second press sends)
+  void handlePhysicalVoiceSelectorPress() => _conversation.micPressed();
 
-  /// Hook for physical button 5: REPEAT VOICE
-  /// Replays the latest CIVI answer (never the user question).
-  void handlePhysicalRepeatVoicePress() {
-    final int index = _messages.lastIndexWhere((m) => !m.isUser);
-    if (index == -1) return;
+  /// Hook for physical button: REPEAT VOICE
+  /// Replays the last spoken answer (never the user question).
+  void handlePhysicalRepeatVoicePress() => _conversation.repeat();
 
-    final latestBotAnswer = _messages[index];
-    if (latestBotAnswer.text.isEmpty) return;
+  /// Hook for physical button: CONFIRM — speaks the complete answer (Decision 24).
+  void handlePhysicalConfirmPress() => _conversation.confirmFullAnswer();
 
-    setState(() {
-      _voiceStatus = VoiceHardwareStatus.replaying;
-    });
-
-    _statusTransitionTimer?.cancel();
-    _statusTransitionTimer = Timer(const Duration(milliseconds: 3600), () {
-      if (!mounted) return;
-      setState(() {
-        _voiceStatus = VoiceHardwareStatus.idle;
-      });
-    });
-  }
-
-  /// Hook for physical button 4: BACK
+  /// Hook for physical button: BACK
   /// Returns to the Accessibility Confirmation screen reliably.
   void handlePhysicalBackPress() {
     Navigator.of(context).pushNamedAndRemoveUntil(
@@ -1320,12 +1135,7 @@ class _VisuallyChallengedChatbotViewState
 
   /// Hook for Session Reset.
   void handlePhysicalResetPress() {
-    setState(() {
-      _loadInitialConversation();
-      _voiceStatus = VoiceHardwareStatus.idle;
-      _recordingTimer?.cancel();
-      _statusTransitionTimer?.cancel();
-    });
+    _conversation.reset();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1339,82 +1149,6 @@ class _VisuallyChallengedChatbotViewState
         duration: const Duration(seconds: 2),
       ),
     );
-  }
-
-  void _startVoiceRecording() {
-    _statusTransitionTimer?.cancel();
-    setState(() {
-      _voiceStatus = VoiceHardwareStatus.recording;
-      _recordingSeconds = 0;
-    });
-
-    _recordingTimer?.cancel();
-    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        _recordingSeconds++;
-      });
-    });
-  }
-
-  void _stopAndSubmitVoiceRecording() {
-    _recordingTimer?.cancel();
-    setState(() {
-      _voiceStatus = VoiceHardwareStatus.processing;
-    });
-
-    final isTamil = widget.language == CiviLanguage.tamil;
-
-    // Simulate voice question processing (Speech-to-Text conversion) and response generation
-    _statusTransitionTimer = Timer(const Duration(milliseconds: 2000), () {
-      if (!mounted) return;
-
-      // 1. Speech-to-Text converted question displayed as normal user message
-      final voiceUserQuestion = CiviChatMessage(
-        text: isTamil
-            ? 'கூட்டுறவு சங்க நிர்வாகக் குழுவின் பணிக்காலம் எவ்வளவு?'
-            : 'What is the tenure of the elected managing committee in a cooperative society?',
-        isUser: true,
-        isVoice: true,
-        timestamp: DateTime.now(),
-      );
-
-      // 2. Chatbot response displayed as normal CIVI response
-      final voiceBotAnswer = CiviChatMessage(
-        text: isTamil
-            ? 'தமிழ்நாடு கூட்டுறவு சங்கங்கள் சட்டம் 1983 பிரிவு 33-ன் படி:\n\n'
-                '• தேர்ந்தெடுக்கப்பட்ட நிர்வாகக் குழுவின் பதவிக்காலம் அதன் முதல் கூட்ட தேதியிலிருந்து **ஐந்து ஆண்டுகள் (5 Years)** ஆகும்.\n'
-                '• பதவிக்காலம் நிறைவடையும் முன் புதிய குழுவிற்கான தேர்தல் முறையாக நடத்தப்பட வேண்டும்.'
-            : 'Under Section 33 of the Tamil Nadu Cooperative Societies Act, 1983:\n\n'
-                '• The term of office of the elected members of the board shall be **five years (5 Years)** from the date of election.\n'
-                '• Fresh elections must be conducted before the expiration of the current committee’s tenure.',
-        isUser: false,
-        isVoice: true,
-        sourceReference: isTamil
-            ? 'தமிழ்நாடு கூட்டுறவு சங்கங்கள் சட்டம், 1983 — பிரிவு 33'
-            : 'Tamil Nadu Cooperative Societies Act, 1983 — Section 33',
-        timestamp: DateTime.now(),
-      );
-
-      setState(() {
-        _messages.add(voiceUserQuestion);
-        _messages.add(voiceBotAnswer);
-        _voiceStatus = VoiceHardwareStatus.speaking;
-      });
-
-      _scrollToBottom();
-
-      // Answers generated from voice questions are automatically spoken in this mode
-      _statusTransitionTimer = Timer(const Duration(milliseconds: 4000), () {
-        if (!mounted) return;
-        setState(() {
-          _voiceStatus = VoiceHardwareStatus.idle;
-        });
-      });
-    });
   }
 
   bool _handleHardwareKeyEvent(KeyEvent event) {
@@ -1436,6 +1170,9 @@ class _VisuallyChallengedChatbotViewState
         handlePhysicalRepeatVoicePress();
         return true;
       }
+    } else if (event.logicalKey == LogicalKeyboardKey.keyC) {
+      handlePhysicalConfirmPress();
+      return true;
     } else if (event.logicalKey == LogicalKeyboardKey.escape ||
         event.logicalKey == LogicalKeyboardKey.keyB) {
       handlePhysicalBackPress();
@@ -1685,7 +1422,8 @@ class _VisuallyChallengedChatbotViewState
                 height: 1.45,
               ),
             ),
-            if (msg.sourceReference != null) ...[
+            // Sources built by the backend from document metadata (Decision 10), shown ONLY if available.
+            if (msg.citations.isNotEmpty || msg.sourceReference != null) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1694,21 +1432,35 @@ class _VisuallyChallengedChatbotViewState
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: _lightGreen.withValues(alpha: 0.4)),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.menu_book, size: 15, color: _lightGreen),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        msg.sourceReference!,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: _lightGreen,
-                          fontWeight: FontWeight.w600,
+                    for (final label in (msg.citations.isNotEmpty ? msg.citations : [msg.sourceReference!]))
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(top: 1),
+                              child: Icon(Icons.menu_book, size: 15, color: _lightGreen),
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                label,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: _lightGreen,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),

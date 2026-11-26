@@ -29,6 +29,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(sessions.router, prefix=API_PREFIX)
+    app.include_router(sessions.kiosk_router, prefix=API_PREFIX)
     app.include_router(chat.router, prefix=API_PREFIX)
     app.include_router(documents.router, prefix=API_PREFIX)
     app.include_router(voice.router, prefix=API_PREFIX)

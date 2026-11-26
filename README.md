@@ -40,3 +40,32 @@ To make cooperative governance and legal information more accessible by providin
 ## 🚀 Project Goal
 
 To bridge the information gap between cooperative institutions and ordinary citizens through accessible AI-powered assistance.
+
+## ▶️ Running it (development)
+
+1. **Backend + speech service (laptop):** double-click `start_civi.cmd`, or see [backend/README.md](backend/README.md)
+   and [speech_service/README.md](speech_service/README.md) for the one-time setup (Python environments, Gemini key,
+   speech models).
+2. **Flutter app (phone on the same Wi-Fi):**
+
+   ```powershell
+   flutter run --dart-define=CIVI_API_BASE_URL=http://<laptop-wifi-ip>:8000
+   ```
+
+   | Option | Default | Meaning |
+   |---|---|---|
+   | `CIVI_API_BASE_URL` | (required) | The laptop's backend address |
+   | `CIVI_KIOSK_ID` | `kiosk-1` | Links the app's conversation to the kiosk's ESP32 (it finds it with `GET /kiosks/{id}/session`) |
+   | `CIVI_APP_AUDIO` | `true` | Use the phone's own microphone and speaker for voice. Set `false` once the ESP32 handles audio |
+
+   On Windows, building the app needs **Developer Mode** (Settings → System → For developers), because the
+   audio plugins need symbolic links.
+
+How the app works with the backend:
+
+- Each chat screen starts a backend session (with the kiosk ID) and polls its messages every 2 s, so questions
+  asked at the kiosk by voice appear in the app too (Decisions 21 and 37).
+- **Standard mode:** typed question → written answer; voice question → written + spoken answer.
+  **Visually challenged mode:** every answer is spoken (Decision 14).
+- Keyboard keys stand in for the kiosk buttons: **M** microphone (press to record, press again to send; stops
+  at 60 s), **R** repeat the last spoken answer, **C** confirm (speak the complete answer), **B** back/reset.
