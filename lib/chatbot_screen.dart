@@ -11,6 +11,9 @@ class CiviChatMessage {
   final bool isUser;
   final bool isVoice;
   final String? sourceReference;
+
+  /// Source labels from the backend, e.g. "[1] TN Co-operative Societies Act, 1983, Section 34, Page 18".
+  final List<String> citations;
   final DateTime timestamp;
 
   const CiviChatMessage({
@@ -18,6 +21,7 @@ class CiviChatMessage {
     required this.isUser,
     this.isVoice = false,
     this.sourceReference,
+    this.citations = const [],
     required this.timestamp,
   });
 }
@@ -101,6 +105,10 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _inputFocusNode = FocusNode();
+
+  /// Remembers the backend session so follow-up questions keep their context.
+  final CiviApiService _api = CiviApiService();
+  bool _isWaitingForAnswer = false;
 
   VoiceHardwareStatus _voiceStatus = VoiceHardwareStatus.idle;
   int _recordingSeconds = 0;
@@ -236,6 +244,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
   /// Hook for Session Reset.
   void handlePhysicalResetPress() {
     _inputFocusNode.unfocus();
+    _api.resetSession();
     setState(() {
       _messages.clear();
       _textController.clear();
@@ -337,11 +346,13 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
 
   Future<void> _handleSendTypedMessage() async {
     final text = _textController.text.trim();
-    if (text.isEmpty) return;
+    // One question at a time, so answers can't arrive out of order.
+    if (text.isEmpty || _isWaitingForAnswer) return;
 
     final isTamil = widget.language == CiviLanguage.tamil;
 
     setState(() {
+      _isWaitingForAnswer = true;
       _messages.add(
         CiviChatMessage(
           text: text,
@@ -360,7 +371,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
     _scrollToBottom();
 
     try {
-      final response = await CiviApiService().sendTextMessage(
+      final response = await _api.sendTextMessage(
         message: text,
         language: isTamil ? 'ta' : 'en',
       );
@@ -371,6 +382,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
             text: response.answer,
             isUser: false,
             isVoice: false,
+            citations: response.citations,
             timestamp: DateTime.now(),
           ),
         );
@@ -403,6 +415,12 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
           ),
         );
       });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isWaitingForAnswer = false;
+        });
+      }
     }
     _scrollToBottom();
   }
@@ -491,8 +509,12 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
                           : ListView.builder(
                               controller: _scrollController,
                               padding: EdgeInsets.symmetric(horizontal: 16, vertical: isCompactHeight ? 6 : 12),
-                              itemCount: _messages.length,
+                              // One extra row for the "CIVI is working" bubble while waiting for an answer.
+                              itemCount: _messages.length + (_isWaitingForAnswer ? 1 : 0),
                               itemBuilder: (context, index) {
+                                if (index == _messages.length) {
+                                  return CiviThinkingBubble(isTamil: isTamil);
+                                }
                                 return _buildMessageItem(_messages[index], isCompactHeight: isCompactHeight);
                               },
                             ),
@@ -807,8 +829,8 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
                 height: 1.45,
               ),
             ),
-            // Source reference and statutory page number (displayed ONLY if available)
-            if (msg.sourceReference != null) ...[
+            // Sources built by the backend from document metadata (Decision 10), shown ONLY if available.
+            if (msg.citations.isNotEmpty || msg.sourceReference != null) ...[
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -817,21 +839,35 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: _emerald.withValues(alpha: 0.3)),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.menu_book, size: 14, color: _deepForest),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        msg.sourceReference!,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: _deepForest,
-                          fontWeight: FontWeight.w600,
+                    for (final label in (msg.citations.isNotEmpty ? msg.citations : [msg.sourceReference!]))
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(top: 1),
+                              child: Icon(Icons.menu_book, size: 14, color: _deepForest),
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                label,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: _deepForest,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -1014,18 +1050,137 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
             width: isCompactHeight ? 34 : 44,
             height: isCompactHeight ? 34 : 44,
             child: ElevatedButton(
-              onPressed: _handleSendTypedMessage,
+              // Disabled while an answer is on its way (one question at a time).
+              onPressed: _isWaitingForAnswer ? null : _handleSendTypedMessage,
               style: ElevatedButton.styleFrom(
                 backgroundColor: _deepForest,
                 foregroundColor: Colors.white,
+                disabledBackgroundColor: _deepForest.withValues(alpha: 0.55),
                 padding: EdgeInsets.zero,
                 shape: const CircleBorder(),
                 elevation: 2,
               ),
-              child: Icon(Icons.send, size: isCompactHeight ? 15 : 18),
+              child: _isWaitingForAnswer
+                  ? SizedBox(
+                      width: isCompactHeight ? 14 : 18,
+                      height: isCompactHeight ? 14 : 18,
+                      child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : Icon(Icons.send, size: isCompactHeight ? 15 : 18),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Shown at the bottom of the chat while the backend searches the law and Gemini writes the answer.
+/// Bouncing dots show the app is alive; after a few seconds a counter shows it is still working.
+class CiviThinkingBubble extends StatefulWidget {
+  const CiviThinkingBubble({super.key, required this.isTamil});
+
+  final bool isTamil;
+
+  @override
+  State<CiviThinkingBubble> createState() => _CiviThinkingBubbleState();
+}
+
+class _CiviThinkingBubbleState extends State<CiviThinkingBubble> with SingleTickerProviderStateMixin {
+  static const Color _deepForest = Color(0xFF1B5E52);
+  static const Color _emerald = Color(0xFF329881);
+
+  late final AnimationController _dots;
+  late final Timer _clock;
+  int _seconds = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _dots = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
+    _clock = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _seconds++);
+    });
+  }
+
+  @override
+  void dispose() {
+    _clock.cancel();
+    _dots.dispose();
+    super.dispose();
+  }
+
+  String get _message {
+    final tamil = widget.isTamil;
+    if (_seconds < 4) {
+      return tamil ? 'சட்ட ஆவணங்களில் தேடுகிறது' : 'Searching the law documents';
+    }
+    if (_seconds < 25) {
+      return tamil ? 'பதிலைத் தயாரிக்கிறது' : 'Preparing your answer';
+    }
+    return tamil ? 'இன்னும் வேலை செய்கிறது, சிறிது பொறுக்கவும்' : 'Still working, please wait';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      label: _message,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12, right: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(4),
+              topRight: Radius.circular(16),
+              bottomLeft: Radius.circular(16),
+              bottomRight: Radius.circular(16),
+            ),
+            border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedBuilder(
+                animation: _dots,
+                builder: (context, _) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [for (var i = 0; i < 3; i++) _dot(i)],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  _seconds >= 4 ? '$_message… ${_seconds}s' : '$_message…',
+                  style: const TextStyle(fontSize: 12.5, color: _deepForest, fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dot(int index) {
+    // Each dot rises and falls a little after the previous one.
+    final phase = (_dots.value - index * 0.18) % 1.0;
+    final lift = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Transform.translate(
+        offset: Offset(0, -4 * lift),
+        child: Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            color: Color.lerp(_emerald.withValues(alpha: 0.45), _deepForest, lift),
+            shape: BoxShape.circle,
+          ),
+        ),
       ),
     );
   }

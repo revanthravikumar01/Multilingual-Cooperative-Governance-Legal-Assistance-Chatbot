@@ -93,6 +93,7 @@ class RetrievalService:
         top_k: int = 5,
         translator: Callable[[str], str] | None = None,
         tamil_query_threshold: float = 0.6,
+        default_jurisdiction: str | None = None,
     ):
         self.store = store
         self.embedder = embedder
@@ -104,6 +105,9 @@ class RetrievalService:
         self.top_k = top_k
         # Translates a Tamil question to English (Sarvam). None means "search the Tamil text only".
         self.translator = translator
+        # Jurisdiction to prefer when the question names none (the kiosk serves Tamil Nadu).
+        # Without it, general questions often rank the Multi-State Act above the Tamil Nadu Act.
+        self.default_jurisdiction = default_jurisdiction
 
     def _translate(self, query: str, language: str) -> tuple[str | None, str | None]:
         """Our documents are mostly English, and the small embedding model matches Tamil questions
@@ -111,7 +115,7 @@ class RetrievalService:
         if language != "ta" or not _TAMIL.search(query):
             return None, None
         if self.translator is None:
-            return None, "Translation is not configured (SARVAM_API_KEY missing)."
+            return None, "Translation is not configured (no GEMINI_API_KEY or SARVAM_API_KEY)."
         try:
             return self.translator(query), None
         except (TemporaryServiceError, PermanentServiceError) as exc:
@@ -166,7 +170,7 @@ class RetrievalService:
         # Keyword signals use the English translation when there is one (the documents are English).
         keyword_source = [translated_query] if translated_query else queries
         query_tokens = {t for q in keyword_source for t in tokenize(q)}
-        hinted = None if jurisdiction else _jurisdiction_hint(" ".join(queries))
+        hinted = None if jurisdiction else (_jurisdiction_hint(" ".join(queries)) or self.default_jurisdiction)
 
         scored: list[Evidence] = []
         for chunk in candidates.values():

@@ -1,0 +1,112 @@
+[
+ {
+  "model": "facebook/mms-tts-tam",
+  "lang": "ta",
+  "file": "mms_ta_1.wav",
+  "text": "உங்கள் கேள்விக்கான பதில் தமிழ்நாடு கூட்டுறவுச் சங்கங்கள் சட்டத்தில் உள்ளது.",
+  "chars": 75,
+  "seconds_audio": 5.9,
+  "seconds_taken": 1.51,
+  "sample_rate": 16000,
+  "load_seconds": 0.7
+ },
+ {
+  "model": "facebook/mms-tts-tam",
+  "lang": "ta",
+  "file": "mms_ta_2.wav",
+  "text": "மேலும் விவரங்களுக்கு, திரையில் காட்டப்பட்டுள்ள மேற்கோள்களைப் பார்க்கவும்.",
+  "chars": 73,
+  "seconds_audio": 5.0,
+  "seconds_taken": 1.14,
+  "sample_rate": 16000,
+  "load_seconds": 0.7
+ },
+ {
+  "model": "facebook/mms-tts-tam",
+  "lang": "ta",
+  "file": "mms_ta_3.wav",
+  "text": "மன்னிக்கவும், இந்தக் கேள்விக்கு அறிவுத் தளத்தில் போதுமான தகவல் இல்லை.",
+  "chars": 69,
+  "seconds_audio": 4.7,
+  "seconds_taken": 1.05,
+  "sample_rate": 16000,
+  "load_seconds": 0.7
+ },
+ {
+  "model": "facebook/mms-tts-tam",
+  "lang": "ta",
+  "file": "mms_ta_4.wav",
+  "text": "இது பிரிவு முப்பத்து நான்கு, உட்பிரிவு இரண்டில் கூறப்பட்டுள்ளது.",
+  "chars": 64,
+  "seconds_audio": 4.9,
+  "seconds_taken": 1.14,
+  "sample_rate": 16000,
+  "load_seconds": 0.7
+ },
+ {
+  "model": "facebook/mms-tts-tam",
+  "lang": "ta",
+  "file": "mms_ta_5.wav",
+  "text": "இது பிரிவு 34(2) இல் கூறப்பட்டுள்ளது.",
+  "chars": 37,
+  "seconds_audio": 3.3,
+  "seconds_taken": 0.73,
+  "sample_rate": 16000,
+  "load_seconds": 0.7
+ },
+ {
+  "model": "facebook/mms-tts-eng",
+  "lang": "en",
+  "file": "mms_en_1.wav",
+  "text": "The answer to your question is in the Tamil Nadu Co-operative Societies Act.",
+  "chars": 76,
+  "seconds_audio": 4.8,
+  "seconds_taken": 1.06,
+  "sample_rate": 16000,
+  "load_seconds": 0.6
+ },
+ {
+  "model": "facebook/mms-tts-eng",
+  "lang": "en",
+  "file": "mms_en_2.wav",
+  "text": "For more details, please see the citations shown on the screen.",
+  "chars": 63,
+  "seconds_audio": 4.6,
+  "seconds_taken": 0.94,
+  "sample_rate": 16000,
+  "load_seconds": 0.6
+ },
+ {
+  "model": "facebook/mms-tts-eng",
+  "lang": "en",
+  "file": "mms_en_3.wav",
+  "text": "Sorry, the knowledge base does not have enough information to answer this question.",
+  "chars": 83,
+  "seconds_audio": 5.4,
+  "seconds_taken": 1.12,
+  "sample_rate": 16000,
+  "load_seconds": 0.6
+ },
+ {
+  "model": "facebook/mms-tts-eng",
+  "lang": "en",
+  "file": "mms_en_4.wav",
+  "text": "This is stated in section thirty four, sub-section two.",
+  "chars": 55,
+  "seconds_audio": 3.9,
+  "seconds_taken": 0.79,
+  "sample_rate": 16000,
+  "load_seconds": 0.6
+ },
+ {
+  "model": "facebook/mms-tts-eng",
+  "lang": "en",
+  "file": "mms_en_5.wav",
+  "text": "This is stated in Section 34(2).",
+  "chars": 32,
+  "seconds_audio": 2.5,
+  "seconds_taken": 0.53,
+  "sample_rate": 16000,
+  "load_seconds": 0.6
+ }
+]

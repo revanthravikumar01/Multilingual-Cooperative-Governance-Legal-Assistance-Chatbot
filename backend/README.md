@@ -1,6 +1,6 @@
-# CIVI FastAPI backend (Phase 1)
+# CIVI FastAPI backend (Phases 1–3)
 
-Modular FastAPI foundation with temporary in-memory sessions. Answers are still placeholders: RAG, Gemini, Sarvam speech and ESP32 support come in later phases.
+FastAPI backend with temporary in-memory sessions, a searchable knowledge base of co-operative law PDFs, and answers written by Gemini **only from that knowledge base**, with citations built by the backend. Speech (free local models, see `API_CONTRACT.md`, Decision 38) and ESP32 support come in later phases.
 
 The full endpoint list (implemented and planned) is in [API_CONTRACT.md](API_CONTRACT.md).
 
@@ -13,7 +13,7 @@ app/errors.py            one error format for every endpoint
 app/dependencies.py      shared objects (the session store)
 app/api/                 endpoints: health, sessions, chat
 app/models/              request/response shapes
-app/services/            logic: sessions, answers (placeholder), documents, embeddings, vector store, retrieval, citations
+app/services/            logic: sessions, answers (retrieval + Gemini), Gemini client, documents, embeddings, vector store, retrieval, citations
 app/utils/               PDF reading, legal chunking, text helpers
 app/scripts/kb.py        knowledge-base command-line tool
 knowledge_base/          uploads/ (PDFs) + documents.json are committed; chroma_db/ is rebuilt locally
@@ -56,7 +56,22 @@ Do not use `127.0.0.1` or `localhost` on a physical phone: they refer to the pho
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/chat -ContentType 'application/json' -Body '{"message":"What is a cooperative society?","language":"en"}'
 ```
 
-The chat reply is deliberately labelled as temporary. Phases 2–3 replace only `app/services/answer_service.py`; the endpoint contract stays the same.
+Without a Gemini key the reply is a clearly labelled temporary answer. See "Gemini answers" below.
+
+## Gemini answers
+
+1. Open https://aistudio.google.com/apikey, sign in with a Google account and click **Create API key**.
+2. Open `backend/.env` (create it with `Copy-Item .env.example .env` if missing) and set `GEMINI_API_KEY=` to the key.
+   Never commit `.env`, never paste the key into chat, Flutter or ESP32 code.
+3. Restart the backend. `/chat` now answers from the knowledge base with citations (`"placeholder": false`).
+
+The default model is `gemini-3.5-flash-lite` (free tier, fast). Change it with `CIVI_GEMINI_MODEL`.
+**Privacy:** on the free tier Google may use the questions and the evidence sent to Gemini to improve its products.
+The evidence is public law, but users should not type personal details. The paid tier does not use them.
+
+Gemini only sees the numbered evidence found in the knowledge base. If nothing relevant is found, Gemini is not
+called and the user gets "Verified information is not available in the current knowledge base." The backend also
+removes any source number Gemini invents, and refuses an answer that cites no real source (Decision 9).
 
 ## Knowledge base
 

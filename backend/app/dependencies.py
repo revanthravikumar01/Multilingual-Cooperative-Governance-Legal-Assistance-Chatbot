@@ -57,14 +57,17 @@ def _knowledge_base() -> dict:
                 candidates=settings.retrieval_candidates,
                 top_k=settings.retrieval_top_k,
                 translator=_tamil_to_english(),
+                default_jurisdiction=settings.default_jurisdiction or None,
             )
         return _kb
 
 
 def _tamil_to_english():
-    """Sarvam translation for Tamil questions, or None if no API key is configured."""
+    """Translates Tamil questions to English before searching: Sarvam if its key is set,
+    otherwise Gemini (free tier), otherwise None (search the Tamil text only)."""
     if not settings.sarvam_api_key:
-        return None
+        gemini = _gemini_client()
+        return gemini.translate_question if gemini else None
     from app.services.sarvam_service import SarvamClient
 
     client = SarvamClient(
@@ -81,6 +84,53 @@ def get_document_service():
 
 def get_retrieval_service():
     return _knowledge_base()["retrieval"]
+
+
+_answer_lock = threading.Lock()
+_answer_service = None
+_gemini_lock = threading.Lock()
+_gemini = None
+
+
+def _gemini_client():
+    """One shared Gemini client, or None if GEMINI_API_KEY is not set."""
+    global _gemini
+    if not settings.gemini_api_key:
+        return None
+    with _gemini_lock:
+        if _gemini is None:
+            from app.services.gemini_service import GeminiClient
+
+            _gemini = GeminiClient(
+                settings.gemini_api_key,
+                model=settings.gemini_model,
+                timeout_seconds=settings.gemini_timeout_seconds,
+                thinking_level=settings.gemini_thinking_level,
+                max_output_tokens=settings.gemini_max_output_tokens,
+                api_revision=settings.gemini_api_revision,
+            )
+        return _gemini
+
+
+def get_answer_service():
+    """Retrieval + Gemini. Without GEMINI_API_KEY it gives placeholder answers and never loads the
+    knowledge base, so the app still runs on a laptop without a key."""
+    global _answer_service
+    with _answer_lock:
+        if _answer_service is None:
+            from app.services.answer_service import AnswerService
+
+            llm = _gemini_client()
+            if llm:
+                _answer_service = AnswerService(
+                    retrieval_provider=get_retrieval_service,
+                    llm=llm,
+                    top_k=settings.retrieval_top_k,
+                    history_messages=settings.chat_history_messages,
+                )
+            else:
+                _answer_service = AnswerService()
+        return _answer_service
 
 
 def is_trusted_host(host: str | None, allow_lan: bool) -> bool:

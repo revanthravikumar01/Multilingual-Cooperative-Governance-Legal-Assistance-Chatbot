@@ -10,7 +10,8 @@ from fastapi.testclient import TestClient
 # Let tests import `main` and `app` from the backend folder.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.dependencies import get_session_service  # noqa: E402
+from app.dependencies import get_answer_service, get_session_service  # noqa: E402
+from app.services.answer_service import AnswerService  # noqa: E402
 from app.services.session_service import SessionService  # noqa: E402
 from main import create_app  # noqa: E402
 
@@ -39,7 +40,14 @@ def service(clock: FakeClock) -> SessionService:
 
 
 @pytest.fixture
-def client(service: SessionService) -> TestClient:
+def answers() -> AnswerService:
+    """Placeholder answers by default, so tests never call Gemini even if backend/.env has a key."""
+    return AnswerService()
+
+
+@pytest.fixture
+def client(service: SessionService, answers: AnswerService) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_session_service] = lambda: service
+    app.dependency_overrides[get_answer_service] = lambda: answers
     return TestClient(app)

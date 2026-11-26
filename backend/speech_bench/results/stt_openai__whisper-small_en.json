@@ -1,0 +1,120 @@
+{
+ "summary": {
+  "model": "openai/whisper-small",
+  "lang": "en",
+  "clips": 15,
+  "load_seconds": 1.1,
+  "avg_audio_seconds": 8.0,
+  "avg_seconds_per_clip": 2.13,
+  "real_time_factor": 0.27,
+  "WER": 0.066,
+  "CER": 0.02
+ },
+ "rows": [
+  {
+   "file": "en_1510.wav",
+   "seconds_audio": 7.9,
+   "seconds_taken": 2.38,
+   "hyp": "The UN also hopes to finalize a fund to help countries affected by global warming to cope with the impacts.",
+   "ref": "The U.N. also hopes to finalize a fund to help countries affected by global warming to cope with the impacts."
+  },
+  {
+   "file": "en_1528.wav",
+   "seconds_audio": 6.8,
+   "seconds_taken": 1.65,
+   "hyp": "Some festivals have special camping areas for families with young children.",
+   "ref": "Some festivals have special camping areas for families with young children."
+  },
+  {
+   "file": "en_1531.wav",
+   "seconds_audio": 4.4,
+   "seconds_taken": 1.85,
+   "hyp": "The East African islands are in the Indian Ocean off the Eastern coast of Africa.",
+   "ref": "The East African Islands are in the Indian Ocean off the eastern coast of Africa."
+  },
+  {
+   "file": "en_1536.wav",
+   "seconds_audio": 8.2,
+   "seconds_taken": 2.51,
+   "hyp": "Local authorities are warning residents in the vicinity of the plant to stay indoors, turn off air conditioners, and not to drink tap water.",
+   "ref": "Local authorities are warning residents in the vicinity of the plant to stay indoors, turn off air-conditioners and not to drink tap water."
+  },
+  {
+   "file": "en_1548.wav",
+   "seconds_audio": 6.5,
+   "seconds_taken": 1.91,
+   "hyp": "When you call someone who is thousands of miles away, you are using a satellite.",
+   "ref": "When you call someone who is thousands of miles away, you are using a satellite."
+  },
+  {
+   "file": "en_1549.wav",
+   "seconds_audio": 10.1,
+   "seconds_taken": 2.21,
+   "hyp": "These theories suggest that people have certain needs and or desires which have been internalized as they mature to adulthood.",
+   "ref": "These theories suggest that people have certain needs and/or desires which have been internalized as they mature to adulthood."
+  },
+  {
+   "file": "en_1559.wav",
+   "seconds_audio": 9.3,
+   "seconds_taken": 2.0,
+   "hyp": "pronunciation is relatively easy in Italian since most words are pronounced exactly how they are written",
+   "ref": "Pronunciation is relatively easy in Italian since most words are pronounced exactly how they are written"
+  },
+  {
+   "file": "en_1560.wav",
+   "seconds_audio": 7.3,
+   "seconds_taken": 2.05,
+   "hyp": "As soon as you get out of the current, swimming back is no more difficult than normally.",
+   "ref": "As soon as you get out of the current, swimming back is no more difficult than normally."
+  },
+  {
+   "file": "en_1578.wav",
+   "seconds_audio": 4.1,
+   "seconds_taken": 1.86,
+   "hyp": "Then, Lakas sing to the lead in singing the Paschams.",
+   "ref": "Then, Lakkha Singh took the lead in singing the bhajans."
+  },
+  {
+   "file": "en_1595.wav",
+   "seconds_audio": 10.0,
+   "seconds_taken": 2.69,
+   "hyp": "The Tibetan Buddhism is based on the teachings of Buddha, but we're extended by the Mayana path of love and by a lot of techniques from Indian yoga.",
+   "ref": "The Tibetan Buddhism is based on the teachings of Buddha, but were extended by the mahayana path of love and by a lot of techniques from Indian Yoga."
+  },
+  {
+   "file": "en_1598.wav",
+   "seconds_audio": 7.5,
+   "seconds_taken": 2.05,
+   "hyp": "Although free people were inside the house when the car impacted it, none of them were hurt.",
+   "ref": "Although three people were inside the house when the car impacted it, none of them were hurt."
+  },
+  {
+   "file": "en_1619.wav",
+   "seconds_audio": 7.1,
+   "seconds_taken": 2.13,
+   "hyp": "However, most signs are indicated only in Catalan because it is established by law as the first official language.",
+   "ref": "However, most signs are indicated only in Catalan because it is established by law as the first official language."
+  },
+  {
+   "file": "en_1620.wav",
+   "seconds_audio": 16.4,
+   "seconds_taken": 3.26,
+   "hyp": "Now widely available throughout the Archi Palago, Japanese cuisine features an array of simply seasoned dishes, the predominant flavorings, the Japanese favor being peanut chilies, sugar, especially Japanese coconut sugar, and various aromatic spices.",
+   "ref": "Now widely available throughout the archipelago, Javanese cuisine features an array of simply seasoned dishes, the predominant flavorings the Javanese favor being peanuts, chillies, sugar (especially Javanese coconut sugar) and various aromatic spices."
+  },
+  {
+   "file": "en_1633.wav",
+   "seconds_audio": 9.5,
+   "seconds_taken": 2.1,
+   "hyp": "In this dynamic transport shuttle, everyone is connected with and supporting a transport system based on private cars.",
+   "ref": "In this dynamic transport shuttle everyone is somehow connected with, and supporting, a transport system based on private cars."
+  },
+  {
+   "file": "en_1652.wav",
+   "seconds_audio": 4.9,
+   "seconds_taken": 1.62,
+   "hyp": "The major religion in Moldova is Orthodox Christian.",
+   "ref": "The major religion in Moldova is Orthodox Christian."
+  }
+ ]
+}

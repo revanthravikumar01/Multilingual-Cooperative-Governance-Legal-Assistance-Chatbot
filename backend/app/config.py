@@ -1,6 +1,6 @@
 """Backend settings, read once from environment variables (.env).
 
-API keys for Gemini and Sarvam will be added here in later phases.
+API keys (GEMINI_API_KEY, SARVAM_API_KEY) are read from backend/.env.
 They must stay on the backend and never go into Flutter or ESP32 code.
 """
 
@@ -65,11 +65,23 @@ class Settings:
     retrieval_top_k: int  # how many chunks to keep as final evidence
     # Allow document uploads from other devices on the local Wi-Fi (not only this laptop).
     admin_allow_lan: bool
+    # Jurisdiction preferred in search when a question names none ("tamil_nadu"; empty = no preference).
+    default_jurisdiction: str = "tamil_nadu"
 
     # Sarvam AI. repr=False keeps the key out of logs and error messages.
     sarvam_api_key: str = field(default="", repr=False)
     sarvam_translate_model: str = "mayura:v1"
     sarvam_timeout_seconds: float = 15.0
+
+    # Google Gemini (Phase 3). Without a key, /chat returns a clearly marked placeholder answer.
+    gemini_api_key: str = field(default="", repr=False)
+    gemini_model: str = "gemini-3.5-flash-lite"
+    gemini_thinking_level: str = "low"
+    gemini_max_output_tokens: int = 4096
+    gemini_timeout_seconds: float = 60.0
+    gemini_api_revision: str = "2026-05-20"
+    # Earlier messages sent to Gemini for follow-up questions (Decision 11).
+    chat_history_messages: int = 6
 
     @property
     def uploads_dir(self) -> Path:
@@ -103,9 +115,17 @@ def load_settings() -> Settings:
         retrieval_candidates=_int_env("CIVI_RETRIEVAL_CANDIDATES", 30),
         retrieval_top_k=_int_env("CIVI_RETRIEVAL_TOP_K", 5),
         admin_allow_lan=_bool_env("CIVI_ADMIN_ALLOW_LAN", False),
+        default_jurisdiction=os.getenv("CIVI_DEFAULT_JURISDICTION", "tamil_nadu").strip(),
         sarvam_api_key=os.getenv("SARVAM_API_KEY", "").strip(),
         sarvam_translate_model=os.getenv("CIVI_SARVAM_TRANSLATE_MODEL", "mayura:v1"),
         sarvam_timeout_seconds=_float_env("CIVI_SARVAM_TIMEOUT_SECONDS", 15.0),
+        gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
+        gemini_model=os.getenv("CIVI_GEMINI_MODEL", "gemini-3.5-flash-lite").strip(),
+        gemini_thinking_level=os.getenv("CIVI_GEMINI_THINKING_LEVEL", "low").strip(),
+        gemini_max_output_tokens=_int_env("CIVI_GEMINI_MAX_OUTPUT_TOKENS", 4096),
+        gemini_timeout_seconds=_float_env("CIVI_GEMINI_TIMEOUT_SECONDS", 60.0),
+        gemini_api_revision=os.getenv("CIVI_GEMINI_API_REVISION", "2026-05-20").strip(),
+        chat_history_messages=_int_env("CIVI_CHAT_HISTORY_MESSAGES", 6),
     )
 
 

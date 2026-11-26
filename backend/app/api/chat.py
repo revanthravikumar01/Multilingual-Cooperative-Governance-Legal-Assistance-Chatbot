@@ -2,16 +2,20 @@
 
 from fastapi import APIRouter, Depends
 
-from app.dependencies import get_session_service
+from app.dependencies import get_answer_service, get_session_service
 from app.models.chat_models import ChatRequest, ChatResponse
-from app.services.answer_service import answer_question
+from app.services.answer_service import AnswerService
 from app.services.session_service import SessionService
 
 router = APIRouter(tags=["chat"])
 
 
 @router.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest, service: SessionService = Depends(get_session_service)) -> ChatResponse:
+def chat(
+    request: ChatRequest,
+    service: SessionService = Depends(get_session_service),
+    answers: AnswerService = Depends(get_answer_service),
+) -> ChatResponse:
     # 1. Find the session (checking its language), or start a new one.
     if request.session_id:
         session = service.touch(request.session_id, request.language)
@@ -22,8 +26,9 @@ def chat(request: ChatRequest, service: SessionService = Depends(get_session_ser
     history = service.recent_history(session.session_id)
     user_msg = service.add_message(session.session_id, "user", request.message, "text")
 
-    # 3. Produce the answer (placeholder now; RAG + Gemini later).
-    result = answer_question(request.message, request.language, history)
+    # 3. Answer from the knowledge base with Gemini (or a placeholder if no Gemini key is set).
+    #    If this fails, the error reaches Flutter and the question stays in the history without an answer.
+    result = answers.answer(request.message, request.language, history)
 
     assistant_msg = service.add_message(
         session.session_id,

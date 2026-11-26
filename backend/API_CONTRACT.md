@@ -38,8 +38,8 @@ Every error response uses the same shape:
 | 400  | `invalid_request`      | Body failed validation (missing field, bad language, ...) |
 | 404  | `session_not_found`    | Session ID is unknown or has expired                      |
 | 409  | `language_mismatch`    | Request language differs from the session's language      |
-| 502  | `upstream_error`       | Gemini / Sarvam failed after all retries (Decision 32)    |
-| 503  | `service_unavailable`  | A dependency (e.g. the knowledge base) is not ready yet   |
+| 502  | `upstream_error`       | Gemini (or the optional Sarvam service) failed after all retries (Decision 32) |
+| 503  | `service_unavailable`  | A dependency is not ready (knowledge base not loaded, free Gemini daily limit used up) |
 
 ---
 
@@ -167,16 +167,32 @@ Response `200`:
   "spoken_summary": null,
   "user_message_seq": 1,
   "assistant_message_seq": 2,
-  "placeholder": true
+  "placeholder": false
 }
 ```
 
 | Field            | Meaning                                                                                   |
 | ---------------- | ----------------------------------------------------------------------------------------- |
+| `answer`         | Plain text. Statements carry markers like `[1]` that match `citations[].number`           |
 | `status`         | `answered` · `insufficient_evidence` (Decision 9) · `out_of_scope` (Decision 27)            |
-| `citations`      | Built by the backend from document metadata, never written by Gemini (Decision 10). Empty unless `answered` |
-| `spoken_summary` | A short spoken version of a long answer (Decision 23). `null` when the full answer is short enough to speak |
-| `placeholder`    | `true` until RAG + Gemini are connected (Phases 2–3). Flutter ignores it                  |
+| `citations`      | Built by the backend from document metadata, never written by Gemini (Decision 10). Numbered 1..n in the order the answer uses them. Empty unless `answered` |
+| `spoken_summary` | A short spoken version of a long answer (Decision 23), numbers written as words. `null` when the answer is under 300 characters (speak it in full) |
+| `placeholder`    | `true` only when `GEMINI_API_KEY` is not set (temporary answer). Flutter ignores it       |
+
+**How an answer is made (✅ Phase 3)**
+
+1. The question is searched in the knowledge base. A short follow-up (≤ 12 words) is also searched together
+   with the previous question in the session.
+2. No relevant evidence → `insufficient_evidence` with a fixed message. Gemini is **not** called.
+3. Gemini (`gemini-3.5-flash-lite` by default, Interactions API, `store: false`) receives only the numbered
+   evidence, the last 6 messages of the session, and strict rules. It replies in a fixed JSON shape.
+4. The backend checks the reply: unknown `[n]` markers are removed, and an `answered` reply without a valid
+   source becomes `insufficient_evidence`. For `insufficient_evidence` / `out_of_scope` the backend uses its own
+   fixed text, not Gemini's.
+
+Errors: `502 upstream_error` when Gemini fails after the retries (2 s, 5 s, 10 s); `503 service_unavailable`
+when the free daily Gemini limit is used up or the knowledge base can't load. The question stays in the
+session history without an answer.
 
 Typed questions do not produce audio. When the kiosk's mode needs speech (Decision 14),
 the ESP32 polls the messages and asks for the audio (see Voice).
@@ -187,6 +203,30 @@ the ESP32 polls the messages and asks for the audio (see Voice).
 
 The ESP32 has about 320 KB of RAM, while 60 s of 16 kHz 16-bit mono audio is about 1.9 MB. Audio is
 therefore **streamed** in both directions with chunked HTTP, never held whole in ESP32 memory.
+
+### Speech engines (Decision 38: free, on the laptop)
+
+Chosen on 2026-11-26 after testing on the kiosk laptop (Ryzen 7, 16 GB RAM, RTX 3050 4 GB).
+Numbers come from `speech_bench/` (15 FLEURS clips per language).
+
+| Job | Engine | Runs on | Measured |
+|---|---|---|---|
+| Tamil speech → text | AI4Bharat IndicConformer 600M (MIT) | CPU | ~1 s per question, 3.0% character errors |
+| English speech → text | OpenAI Whisper small (Apache-2.0) | CPU | ~2 s per question, 6.6% word errors |
+| Tamil text → speech | AI4Bharat IndicF5 (MIT) | GPU (bf16, 16 steps) | ~4 s per sentence |
+
+- The language is locked per session, so the backend always knows which recognizer to use.
+- IndicF5 needs ~2.9 GB of the 4 GB GPU, so speech-to-text stays on the CPU.
+- IndicF5 speaks in the voice of a short **reference recording**. The kiosk uses ~8 s of clear Tamil
+  recorded by a team member **with their consent**; never clone anyone else's voice.
+- `spoken_summary` must write numbers as words ("பிரிவு முப்பத்து நான்கு"), because digits and
+  brackets come out garbled.
+- Audio is generated sentence by sentence, so playback can start after the first sentence (~4 s).
+- IndicF5 outputs 24 kHz; the backend resamples to 16 kHz for the ESP32.
+- Speech runs as a **separate local service** with its own Python environment (GPU PyTorch and IndicF5's
+  dependencies conflict with the main backend). The main backend calls it over localhost.
+- English text → speech engine: still to decide (IndicF5 is trained on Indian languages).
+- Fallback if the kiosk has no NVIDIA GPU: Sarvam text-to-speech (paid, ₹3 per 1,000 characters).
 
 ### 🕓 `POST /voice/query`
 

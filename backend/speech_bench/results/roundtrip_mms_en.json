@@ -1,0 +1,50 @@
+{
+ "summary": {
+  "model": "openai/whisper-small",
+  "lang": "en",
+  "clips": 5,
+  "load_seconds": 0.9,
+  "avg_audio_seconds": 4.1,
+  "avg_seconds_per_clip": 1.68,
+  "real_time_factor": 0.41,
+  "WER": 0.182,
+  "CER": 0.093
+ },
+ "rows": [
+  {
+   "file": "mms_en_1.wav",
+   "seconds_audio": 4.8,
+   "seconds_taken": 1.93,
+   "hyp": "The answer to your question is in the Tamil Medical Operative Societies Act.",
+   "ref": "The answer to your question is in the Tamil Nadu Co-operative Societies Act."
+  },
+  {
+   "file": "mms_en_2.wav",
+   "seconds_audio": 4.6,
+   "seconds_taken": 1.74,
+   "hyp": "For more details, please see the cessations shown on the screen.",
+   "ref": "For more details, please see the citations shown on the screen."
+  },
+  {
+   "file": "mms_en_3.wav",
+   "seconds_audio": 5.4,
+   "seconds_taken": 1.93,
+   "hyp": "Sorry, the knowledge base does not have enough information to answer this question.",
+   "ref": "Sorry, the knowledge base does not have enough information to answer this question."
+  },
+  {
+   "file": "mms_en_4.wav",
+   "seconds_audio": 3.9,
+   "seconds_taken": 1.57,
+   "hyp": "This is stated in section 34, subsection 2.",
+   "ref": "This is stated in section thirty four, sub-section two."
+  },
+  {
+   "file": "mms_en_5.wav",
+   "seconds_audio": 2.5,
+   "seconds_taken": 1.48,
+   "hyp": "This is stated in section part.",
+   "ref": "This is stated in Section 34(2)."
+  }
+ ]
+}
