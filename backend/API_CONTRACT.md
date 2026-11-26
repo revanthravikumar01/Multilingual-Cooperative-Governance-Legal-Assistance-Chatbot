@@ -40,6 +40,9 @@ Every error response uses the same shape:
 | 409  | `language_mismatch`    | Request language differs from the session's language      |
 | 502  | `upstream_error`       | Gemini (or the optional Sarvam service) failed after all retries (Decision 32) |
 | 503  | `service_unavailable`  | A dependency is not ready (knowledge base not loaded, free Gemini daily limit used up) |
+| 503  | `speech_unavailable`   | The local speech service is not running or still loading its models |
+| 400  | `invalid_audio`        | Voice upload is not 16 kHz 16-bit mono WAV |
+| 413  | `payload_too_large`    | Voice upload longer than 60 seconds |
 
 ---
 
@@ -199,7 +202,7 @@ the ESP32 polls the messages and asks for the audio (see Voice).
 
 ---
 
-## Voice (ESP32), 🕓 Phase 4 / Phase 7
+## Voice (ESP32), ✅ Phase 4 (ESP32 side: Phase 7)
 
 The ESP32 has about 320 KB of RAM, while 60 s of 16 kHz 16-bit mono audio is about 1.9 MB. Audio is
 therefore **streamed** in both directions with chunked HTTP, never held whole in ESP32 memory.
@@ -207,31 +210,36 @@ therefore **streamed** in both directions with chunked HTTP, never held whole in
 ### Speech engines (Decision 38: free, on the laptop)
 
 Chosen on 2026-11-26 after testing on the kiosk laptop (Ryzen 7, 16 GB RAM, RTX 3050 4 GB).
-Numbers come from `speech_bench/` (15 FLEURS clips per language).
+Numbers come from `speech_bench/` (15 FLEURS clips per language). The engines run in the separate
+**speech service** (`speech_service/`, port 8001, localhost only), which this backend calls.
 
 | Job | Engine | Runs on | Measured |
 |---|---|---|---|
 | Tamil speech → text | AI4Bharat IndicConformer 600M (MIT) | CPU | ~1 s per question, 3.0% character errors |
 | English speech → text | OpenAI Whisper small (Apache-2.0) | CPU | ~2 s per question, 6.6% word errors |
 | Tamil text → speech | AI4Bharat IndicF5 (MIT) | GPU (bf16, 16 steps) | ~4 s per sentence |
+| English text → speech | Windows built-in voice (Microsoft Zira) | CPU | ~1 s |
 
-- The language is locked per session, so the backend always knows which recognizer to use.
+- The language is locked per session, so the backend always knows which recognizer and voice to use.
 - IndicF5 needs ~2.9 GB of the 4 GB GPU, so speech-to-text stays on the CPU.
-- IndicF5 speaks in the voice of a short **reference recording**. The kiosk uses ~8 s of clear Tamil
-  recorded by a team member **with their consent**; never clone anyone else's voice.
-- `spoken_summary` must write numbers as words ("பிரிவு முப்பத்து நான்கு"), because digits and
-  brackets come out garbled.
-- Audio is generated sentence by sentence, so playback can start after the first sentence (~4 s).
-- IndicF5 outputs 24 kHz; the backend resamples to 16 kHz for the ESP32.
-- Speech runs as a **separate local service** with its own Python environment (GPU PyTorch and IndicF5's
-  dependencies conflict with the main backend). The main backend calls it over localhost.
-- English text → speech engine: still to decide (IndicF5 is trained on Indian languages).
+- IndicF5 speaks in the voice of a short **reference recording**: AI4Bharat's sample voice until a team
+  member's recording (made **with their consent**) is added (`speech_service/voices/README.md`).
+- Before speaking, the backend makes text speakable: `[n]` markers and list symbols are removed, and
+  numbers become words ("Section 34(2)" → "Section thirty-four, sub-section two"; "பிரிவு 20" →
+  "பிரிவு இருபது"), because the voices garble digits.
+- IndicF5 outputs 24 kHz; the speech service converts all audio to 16 kHz 16-bit mono for the ESP32.
+- Recordings quieter than speech are treated as "nothing said" (no guessing from noise).
 - Fallback if the kiosk has no NVIDIA GPU: Sarvam text-to-speech (paid, ₹3 per 1,000 characters).
 
-### 🕓 `POST /voice/query`
+### ✅ `POST /voice/query`
 
-- Headers: `Content-Type: audio/wav`, `X-Session-Id: <id>`, `Transfer-Encoding: chunked`
-- Body: a WAV file, **16 kHz, 16-bit, mono, ≤ 60 s** (Decision 20)
+- Headers: `Content-Type: audio/wav`, `X-Session-Id: <id>` (required), `Transfer-Encoding: chunked` (allowed)
+- Body: a WAV file, **16 kHz, 16-bit, mono, ≤ 60 s** (Decision 20). Other formats → `400 invalid_audio`;
+  longer → `413 payload_too_large`.
+
+The session's language decides the recognizer. The recognised question is answered exactly like a typed
+question (no confirmation step, Decision 21) and both messages are stored with `"source": "voice"`, so
+Flutter shows them by polling `GET /sessions/{id}/messages`.
 
 Response `200`:
 
@@ -240,22 +248,40 @@ Response `200`:
   "session_id": "3f6c...",
   "status": "answered",
   "transcript": "கூட்டுறவு சங்கம் என்றால் என்ன?",
-  "answer": "...",
+  "answer": "... [1] ...",
+  "citations": [ { "number": 1, "label": "[1] ...", "...": "..." } ],
   "spoken_summary": "...",
+  "user_message_seq": 3,
+  "assistant_message_seq": 4,
   "audio": {
-    "summary_url": "/api/v1/voice/audio/ab12?variant=summary",
-    "full_url": "/api/v1/voice/audio/ab12?variant=full"
-  }
+    "summary_url": "/api/v1/voice/audio/3f6c.../4?variant=summary",
+    "full_url": "/api/v1/voice/audio/3f6c.../4?variant=full"
+  },
+  "placeholder": false
 }
 ```
 
-If speech is not recognized, `status` is `"stt_failed"` and `audio.summary_url` points to the spoken
-"please repeat" prompt (Decision 17).
+If nothing could be recognised (silence, noise), `status` is `"stt_failed"`, `transcript` is `""`,
+`user_message_seq` is `null`, and `answer` is a "please repeat in <language>, or type your question" prompt.
+The prompt is stored as an assistant message with status `stt_failed`, so Flutter shows it, and its
+`audio.summary_url` speaks it (Decision 17).
 
-### 🕓 `GET /voice/audio/{audio_id}?variant=summary|full`
+Errors: `503 speech_unavailable` when the speech service is not running or still loading;
+`502 upstream_error` when recognition fails; the usual Gemini errors from `/chat`.
 
-This streams a WAV file (16 kHz, 16-bit mono) for the MAX98357A. **Confirm** plays `full`, and
-**Repeat Voice** replays whichever variant was last selected (Decision 24).
+### ✅ `GET /voice/audio/{session_id}/{seq}?variant=summary|full`
+
+A WAV file (16 kHz, 16-bit mono) for the MAX98357A, for **any** assistant message: voice answers, and
+typed answers in visually challenged mode (Decision 14).
+
+- `summary` (default): the short `spoken_summary` if the answer has one, otherwise the whole answer.
+- `full`: the whole answer. **Confirm** plays `full`; **Repeat Voice** replays whichever variant was last
+  played (Decision 24). The ESP32 keeps track of that.
+- The summary of a voice answer is generated right after the answer, so it is usually ready when asked
+  for. Audio is cached in memory, so Repeat Voice is instant. A long `full` answer takes ~4 s per Tamil
+  sentence to generate the first time.
+- Does not refresh the session timer. Errors: `404 message_not_found` (no assistant message with that
+  number), `503 speech_unavailable`.
 
 ---
 

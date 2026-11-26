@@ -1,6 +1,6 @@
-# CIVI FastAPI backend (Phases 1–3)
+# CIVI FastAPI backend (Phases 1–4)
 
-FastAPI backend with temporary in-memory sessions, a searchable knowledge base of co-operative law PDFs, and answers written by Gemini **only from that knowledge base**, with citations built by the backend. Speech (free local models, see `API_CONTRACT.md`, Decision 38) and ESP32 support come in later phases.
+FastAPI backend with temporary in-memory sessions, a searchable knowledge base of co-operative law PDFs, and answers written by Gemini **only from that knowledge base**, with citations built by the backend. Voice questions and spoken answers use free local models in a separate speech service (`../speech_service/`, Decision 38). ESP32 support comes in Phase 7.
 
 The full endpoint list (implemented and planned) is in [API_CONTRACT.md](API_CONTRACT.md).
 
@@ -11,7 +11,7 @@ main.py                  builds the app and registers routes
 app/config.py            settings from .env
 app/errors.py            one error format for every endpoint
 app/dependencies.py      shared objects (the session store)
-app/api/                 endpoints: health, sessions, chat
+app/api/                 endpoints: health, sessions, chat, documents, voice
 app/models/              request/response shapes
 app/services/            logic: sessions, answers (retrieval + Gemini), Gemini client, documents, embeddings, vector store, retrieval, citations
 app/utils/               PDF reading, legal chunking, text helpers
@@ -57,6 +57,23 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/chat -ContentTy
 ```
 
 Without a Gemini key the reply is a clearly labelled temporary answer. See "Gemini answers" below.
+
+## Voice (Phase 4)
+
+Voice needs the **speech service** running next to this backend (see [../speech_service/README.md](../speech_service/README.md)
+for the one-time setup). To start both at once, double-click `start_civi.cmd` in the repository folder.
+
+- `POST /api/v1/voice/query`: the ESP32 sends a 16 kHz 16-bit mono WAV question (header `X-Session-Id`);
+  the answer comes back with links to the spoken audio.
+- `GET /api/v1/voice/audio/{session_id}/{seq}?variant=summary|full`: the spoken answer as WAV.
+
+Try it without the ESP32 (any 16-bit WAV recording of a question):
+
+```powershell
+.\.venv\Scripts\python.exe -m app.scripts.voice_demo C:\path\to\question.wav --language ta
+```
+
+If the speech service isn't running, typed chat still works; voice endpoints answer `503 speech_unavailable`.
 
 ## Gemini answers
 

@@ -147,3 +147,26 @@ def require_trusted_client(request: Request) -> None:
     host = request.client.host if request.client else None
     if not is_trusted_host(host, settings.admin_allow_lan):
         raise ApiError(403, "forbidden", "Document management is only allowed from the backend laptop.")
+
+
+_speech_lock = threading.Lock()
+_speech: dict = {}
+
+
+def get_speech_client():
+    """Client for the local speech service (speech_service/). Created once."""
+    with _speech_lock:
+        if "client" not in _speech:
+            from app.services.speech_client import SpeechClient
+
+            _speech["client"] = SpeechClient(settings.speech_service_url, settings.speech_timeout_seconds)
+        return _speech["client"]
+
+
+def get_audio_cache():
+    with _speech_lock:
+        if "cache" not in _speech:
+            from app.services.speech_client import AudioCache
+
+            _speech["cache"] = AudioCache()
+        return _speech["cache"]

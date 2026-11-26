@@ -83,6 +83,10 @@ class Settings:
     # Earlier messages sent to Gemini for follow-up questions (Decision 11).
     chat_history_messages: int = 6
 
+    # Local speech service (Phase 4, Decision 38): speech_service/ on this laptop.
+    speech_service_url: str = "http://127.0.0.1:8001"
+    speech_timeout_seconds: float = 180.0
+
     @property
     def uploads_dir(self) -> Path:
         return self.knowledge_base_dir / "uploads"
@@ -126,6 +130,8 @@ def load_settings() -> Settings:
         gemini_timeout_seconds=_float_env("CIVI_GEMINI_TIMEOUT_SECONDS", 60.0),
         gemini_api_revision=os.getenv("CIVI_GEMINI_API_REVISION", "2026-05-20").strip(),
         chat_history_messages=_int_env("CIVI_CHAT_HISTORY_MESSAGES", 6),
+        speech_service_url=os.getenv("CIVI_SPEECH_URL", "http://127.0.0.1:8001").strip(),
+        speech_timeout_seconds=_float_env("CIVI_SPEECH_TIMEOUT_SECONDS", 180.0),
     )
 
 

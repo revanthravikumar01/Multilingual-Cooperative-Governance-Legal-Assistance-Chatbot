@@ -1,0 +1,24 @@
+# CIVI speech service. Versions tested together on 2026-11-26 (Windows 11, Python 3.14, RTX 3050).
+# Do not install these into backend/.venv: the speech service has its own environment.
+# torch (GPU build), torchaudio and IndicF5 are installed by setup_speech.py, not by this file.
+fastapi==0.165.0
+uvicorn==0.54.0
+numpy==2.5.5
+scipy==1.18.1
+soundfile==0.14.0
+huggingface_hub==1.33.0
+transformers==5.24.1
+tokenizers==0.23.3
+safetensors==0.8.0
+onnxruntime==1.32.0
+pyyaml==6.0.4
+# IndicF5 model code dependencies (inference only)
+x-transformers==2.32.3
+ema-pytorch==0.8.3
+torchdiffeq==0.2.5
+vocos==0.1.0
+encodec==0.1.1
+einops==0.8.2
+jieba==0.42.1
+pypinyin==0.55.0
+librosa==1.0.1

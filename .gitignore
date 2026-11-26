@@ -56,3 +56,9 @@ backend/.venv/
 backend/knowledge_base/chroma_db/
 backend/knowledge_base/*.tmp
 .pytest_cache/
+
+# Speech service: own environment, downloads, and personal voice recordings (consent-only)
+speech_service/.venv/
+speech_service/.cache/
+speech_service/voices/*.wav
+speech_service/voices/*.txt
