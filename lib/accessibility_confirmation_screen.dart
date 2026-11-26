@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'language_selection_screen.dart';
+import 'services/kiosk_buttons.dart';
 
 /// Supported accessibility modes in CIVI.
 enum CiviAccessibilityMode { standard, visuallyChallenged }
@@ -50,10 +51,12 @@ class _AccessibilityConfirmationScreenState
   late final Animation<Alignment> _bottomAlignmentAnim;
 
   final FocusNode _focusNode = FocusNode();
+  StreamSubscription<KioskEvent>? _kioskButtons;
 
   @override
   void initState() {
     super.initState();
+    _kioskButtons = KioskButtons.instance.events.listen(_handleKioskButton);
     _language = widget.initialLanguage ?? CiviLanguage.english;
 
     _bgController = AnimationController(
@@ -83,6 +86,7 @@ class _AccessibilityConfirmationScreenState
 
   @override
   void dispose() {
+    _kioskButtons?.cancel();
     _announcementTimer?.cancel();
     _focusNode.dispose();
     _bgController.dispose();
@@ -171,6 +175,19 @@ class _AccessibilityConfirmationScreenState
         '/language_selection',
         arguments: _language,
       );
+    }
+  }
+
+  /// Physical kiosk buttons (ESP32): Confirm, Visually Challenged, and Back/Language (choose language again).
+  void _handleKioskButton(KioskEvent event) {
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    switch (event.button) {
+      case 'confirm':
+        confirmMode();
+      case 'accessibility':
+        activateDedicatedVisuallyChallengedMode();
+      case 'back' || 'language':
+        handlePhysicalBackPress();
     }
   }
 

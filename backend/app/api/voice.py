@@ -56,8 +56,7 @@ async def voice_query(
     cache: AudioCache = Depends(get_audio_cache),
 ) -> VoiceQueryResponse:
     language = sessions.get(session_id).language
-    wav = await _read_limited(request)
-    _check_wav(wav)
+    wav = _clean_wav(await _read_limited(request))
     # The rest takes seconds (speech recognition, Gemini): run it in a worker thread so the
     # backend keeps answering other requests (Flutter polling, audio downloads) meanwhile.
     return await run_in_threadpool(_answer_voice, wav, session_id, language, background, sessions, answers,
@@ -185,19 +184,58 @@ async def _read_limited(request: Request) -> bytes:
     return b"".join(chunks)
 
 
-def _check_wav(data: bytes) -> None:
-    try:
-        with wave.open(io.BytesIO(data)) as wav:
-            channels, width, rate, frames = wav.getnchannels(), wav.getsampwidth(), wav.getframerate(), wav.getnframes()
-    except (wave.Error, EOFError) as exc:
-        raise ApiError(400, "invalid_audio", f"Audio must be a WAV file: {exc}") from exc
-    if (channels, width, rate) != (1, 2, SAMPLE_RATE):
+def _clean_wav(data: bytes) -> bytes:
+    """Check the upload is 16 kHz 16-bit mono PCM WAV and return a tidy copy of it.
+
+    The ESP32 streams its recording while you speak, so when it writes the WAV header it can't know the
+    final length yet: it writes 0 or 0xFFFFFFFF as the sizes. Such headers are accepted here, and the
+    audio length is taken from the data that actually arrived.
+    """
+    if len(data) < 12 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        raise ApiError(400, "invalid_audio", "Audio must be a WAV file (RIFF/WAVE header missing).")
+    fmt = None
+    pos = 12
+    while pos + 8 <= len(data):
+        chunk_id = data[pos:pos + 4]
+        size = int.from_bytes(data[pos + 4:pos + 8], "little")
+        body = pos + 8
+        if chunk_id == b"fmt ":
+            if len(data) < body + 16:
+                break
+            fmt = (
+                int.from_bytes(data[body:body + 2], "little"),  # 1 = PCM
+                int.from_bytes(data[body + 2:body + 4], "little"),  # channels
+                int.from_bytes(data[body + 4:body + 8], "little"),  # sample rate
+                int.from_bytes(data[body + 14:body + 16], "little"),  # bits per sample
+            )
+        elif chunk_id == b"data":
+            if fmt is None:
+                break
+            available = len(data) - body
+            if size in (0, 0xFFFFFFFF) or size > available:
+                size = available  # streamed: use what actually arrived
+            pcm = data[body:body + size - (size % 2)]
+            return _rebuild(fmt, pcm)
+        pos = body + size + (size % 2)  # chunks are padded to an even length
+    raise ApiError(400, "invalid_audio", "Audio must be a WAV file with 'fmt ' and 'data' sections.")
+
+
+def _rebuild(fmt: tuple[int, int, int, int], pcm: bytes) -> bytes:
+    audio_format, channels, rate, bits = fmt
+    if (audio_format, channels, rate, bits) != (1, 1, SAMPLE_RATE, 16):
         raise ApiError(
             400, "invalid_audio",
-            f"Audio must be 16 kHz, 16-bit, mono WAV (got {rate} Hz, {width * 8}-bit, {channels} channel(s)).",
+            f"Audio must be 16 kHz, 16-bit, mono PCM WAV (got {rate} Hz, {bits}-bit, {channels} channel(s)).",
         )
-    if frames / SAMPLE_RATE > MAX_SECONDS + 1:
+    if len(pcm) / (SAMPLE_RATE * 2) > MAX_SECONDS + 1:
         raise ApiError(413, "payload_too_large", f"Recordings may be at most {MAX_SECONDS} seconds.")
+    out = io.BytesIO()
+    with wave.open(out, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(SAMPLE_RATE)
+        wav.writeframes(pcm)
+    return out.getvalue()
 
 
 def _speech_unavailable() -> ApiError:

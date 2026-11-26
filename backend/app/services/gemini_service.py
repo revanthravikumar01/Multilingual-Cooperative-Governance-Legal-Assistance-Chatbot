@@ -114,7 +114,7 @@ class GeminiClient:
     def _post(self, payload: dict) -> dict:
         try:
             response = self._http.post(INTERACTIONS_URL, json=payload, headers=self._headers)
-        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+        except httpx.TransportError as exc:  # timeouts, network errors, dropped connections
             raise TemporaryServiceError(f"network problem: {exc}") from exc
 
         if response.status_code == 200:

@@ -1,5 +1,7 @@
 import 'package:material_ui/material_ui.dart';
+import 'dart:async';
 import 'package:flutter/services.dart';
+import 'services/kiosk_buttons.dart';
 
 /// Available languages supported by CIVI.
 enum CiviLanguage { english, tamil }
@@ -39,10 +41,12 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
   late final Animation<Alignment> _bottomAlignmentAnim;
 
   final FocusNode _focusNode = FocusNode();
+  StreamSubscription<KioskEvent>? _kioskButtons;
 
   @override
   void initState() {
     super.initState();
+    _kioskButtons = KioskButtons.instance.events.listen(_handleKioskButton);
 
     _bgController = AnimationController(
       vsync: this,
@@ -71,6 +75,7 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
 
   @override
   void dispose() {
+    _kioskButtons?.cancel();
     _focusNode.dispose();
     _bgController.dispose();
     super.dispose();
@@ -116,6 +121,17 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
           duration: const Duration(seconds: 2),
         ),
       );
+    }
+  }
+
+  /// Physical kiosk buttons (ESP32): Language selects Tamil/English, Confirm continues.
+  void _handleKioskButton(KioskEvent event) {
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    switch (event.button) {
+      case 'language':
+        switchLanguage();
+      case 'confirm':
+        confirmLanguage();
     }
   }
 

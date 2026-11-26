@@ -287,17 +287,62 @@ typed answers in visually challenged mode (Decision 14).
 
 ---
 
-## Hardware buttons, 🕓 Phase 7
+## Hardware buttons, ✅ Phase 7 (backend + app; ESP32 firmware pending)
 
-### 🕓 `POST /hardware/events`
+The ESP32 talks to the backend directly (Decision 34); the app follows. Wiring plan: `esp32/WIRING.md`.
+
+### ✅ `POST /hardware/events`
+
+The ESP32 reports every button press, and what its microphone/speaker is doing, so the app can show it.
 
 ```json
-{ "kiosk_id": "kiosk-1", "button": "language" }
+{ "kiosk_id": "kiosk-1", "button": "confirm" }
+{ "kiosk_id": "kiosk-1", "status": "recording" }
 ```
 
-`button` is one of `language`, `confirm`, `back`, `repeat`, `mic`, `accessibility`.
-Microphone recording, the stop-at-60-seconds limit and playback interruption happen on the ESP32 itself. This
-endpoint only reports state changes, such as language or mode, so Flutter can show them.
+Send exactly one of:
+
+- `button`: `language` · `confirm` · `back` · `repeat` · `mic` · `accessibility` (the six physical buttons)
+- `status`: `recording` · `processing` · `speaking` · `idle`
+
+Response `201`: `{ "seq": 7, "button": "confirm", "status": null, "created_at": "..." }`.
+Anything else → `400 invalid_request`. The newest 100 events per kiosk are kept in memory.
+
+### ✅ `GET /kiosks/{kiosk_id}/events?after=<seq>`
+
+The Flutter app polls this about twice a second. `after=-1` (the default) returns no events, only
+`latest_seq`, so presses from before the app started are ignored.
+
+```json
+{ "kiosk_id": "kiosk-1", "latest_seq": 8, "events": [ { "seq": 8, "button": "mic", "status": null, "created_at": "..." } ] }
+```
+
+What each button does in the app (the same as its keyboard shortcut):
+
+| Button | Language screen | Mode screen | Chat screens |
+|---|---|---|---|
+| `language` | switch Tamil / English | back to language | new conversation: back to language |
+| `confirm` | continue | continue with the selected mode | speak the full answer* |
+| `back` | — | back to language | reset the conversation, then back to mode |
+| `repeat` | — | — | replay the last spoken audio* |
+| `mic` | — | — | record / send* |
+| `accessibility` | — | visually challenged mode | switch to visually challenged mode (Standard chat) |
+
+\* Done by the app only when it uses the device's own microphone/speaker (`CIVI_APP_AUDIO=true`). With the
+ESP32 in charge of audio (`CIVI_APP_AUDIO=false`), the ESP32 records and plays itself and reports `status`;
+the app shows that status and the conversation. Several presses arriving together are handled one at a time,
+each after the previous one has taken effect on screen.
+
+### What the ESP32 does (reference: `backend/app/scripts/fake_esp32.py`)
+
+1. **Mic, 1st press:** stop playback, report `status: recording`, record 16 kHz 16-bit mono (stop at 60 s).
+2. **Mic, 2nd press:** report `processing`; `GET /kiosks/{id}/session`; stream the WAV to `POST /voice/query`
+   (chunked; the header's RIFF and data sizes may be `0xFFFFFFFF` because the length isn't known yet);
+   report `speaking`; play `audio.summary_url`; report `idle`.
+3. **Repeat:** play the last played audio again (after a restart: the latest answer's summary, found with
+   `GET /sessions/{id}/messages`).
+4. **Confirm:** play `.../voice/audio/{session}/{seq}?variant=full` of the latest answer. A long Tamil answer
+   can take ~20 s to generate the first time.
 
 ---
 

@@ -170,3 +170,17 @@ def get_audio_cache():
 
             _speech["cache"] = AudioCache()
         return _speech["cache"]
+
+
+_hardware_service = None
+
+
+def get_hardware_service():
+    """Kiosk button presses / ESP32 status, kept in memory (Phase 7)."""
+    global _hardware_service
+    with _speech_lock:
+        if _hardware_service is None:
+            from app.services.hardware_service import HardwareEventService
+
+            _hardware_service = HardwareEventService()
+        return _hardware_service

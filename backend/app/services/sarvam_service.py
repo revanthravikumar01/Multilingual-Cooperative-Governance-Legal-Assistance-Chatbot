@@ -39,7 +39,7 @@ class SarvamClient:
     def _post(self, url: str, payload: dict) -> dict:
         try:
             response = self._http.post(url, json=payload, headers=self._headers)
-        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+        except httpx.TransportError as exc:  # timeouts, network errors, dropped connections
             raise TemporaryServiceError(f"network problem: {exc}") from exc
 
         if response.status_code == 200:

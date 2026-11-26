@@ -346,3 +346,17 @@ def test_empty_translation_is_an_error():
     client = _client(lambda r: httpx.Response(200, json=_ok({"english": "  "})))
     with pytest.raises(PermanentServiceError):
         client.translate_question("கேள்வி")
+
+
+def test_gemini_client_retries_a_dropped_connection():
+    """A reused keep-alive connection the server already closed raises RemoteProtocolError: retry it."""
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        return httpx.Response(200, json=_ok({"ok": True}))
+
+    assert _client(handler).generate_json("S", [("user", "q")], {}) == {"ok": True}
+    assert calls["n"] == 2

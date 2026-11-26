@@ -295,6 +295,32 @@ class CiviConversation extends ChangeNotifier {
     if (seq != null) await _play(seq, full: true);
   }
 
+  /// Shows what the kiosk's ESP32 microphone/speaker is doing, when the ESP32 handles audio
+  /// (CIVI_APP_AUDIO=false). The ESP32 reports: recording | processing | speaking | idle.
+  void showDeviceStatus(String deviceStatus) {
+    if (appAudioEnabled) return; // the app's own microphone and speaker are in charge
+    _recordTimer?.cancel();
+    switch (deviceStatus) {
+      case 'recording':
+        recordingSeconds = 0;
+        _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+          recordingSeconds++;
+          _notify();
+        });
+        status = VoiceHardwareStatus.recording;
+      case 'processing':
+        status = VoiceHardwareStatus.processing;
+        waitingForAnswer = true; // the question and answer arrive by polling
+      case 'speaking':
+        status = VoiceHardwareStatus.speaking;
+        waitingForAnswer = false;
+      default:
+        status = VoiceHardwareStatus.idle;
+        waitingForAnswer = false;
+    }
+    _notify();
+  }
+
   int? _latestAnswerSeq() {
     for (final m in messages.reversed) {
       if (!m.isUser && m.seq != null) return m.seq;

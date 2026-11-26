@@ -3,8 +3,11 @@ import 'boot_screen.dart';
 import 'language_selection_screen.dart';
 import 'accessibility_confirmation_screen.dart';
 import 'chatbot_screen.dart';
+import 'services/kiosk_buttons.dart';
 
 void main() {
+  // Kiosk's physical buttons arrive from the ESP32 through the backend (Phase 7).
+  KioskButtons.instance.start();
   runApp(const MyApp());
 }
 

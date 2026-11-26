@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'language_selection_screen.dart';
 import 'accessibility_confirmation_screen.dart';
 import 'services/civi_conversation.dart';
+import 'services/kiosk_buttons.dart';
 
 export 'services/civi_conversation.dart' show CiviChatMessage, VoiceHardwareStatus;
 
@@ -79,6 +80,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
 
   /// Backend session, messages (typed here or spoken at the kiosk) and voice.
   late final CiviConversation _conversation;
+  StreamSubscription<KioskEvent>? _kioskButtons;
   int _shownMessages = 0;
   bool _isSessionReset = false;
 
@@ -103,6 +105,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
       ..onNotice = _showNotice
       ..addListener(_onConversationChanged);
     _conversation.start();
+    _kioskButtons = KioskButtons.instance.events.listen(_handleKioskButton);
 
     _pulseController = AnimationController(
       vsync: this,
@@ -117,6 +120,7 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
+    _kioskButtons?.cancel();
     _conversation.removeListener(_onConversationChanged);
     _conversation.dispose();
     _textController.dispose();
@@ -233,6 +237,36 @@ class _StandardChatbotViewState extends State<StandardChatbotView>
         );
       }
     });
+  }
+
+  /// Physical kiosk buttons (ESP32). With the ESP32 in charge of audio (CIVI_APP_AUDIO=false), Mic,
+  /// Repeat and Confirm are handled on the ESP32 itself and the app only shows its status.
+  void _handleKioskButton(KioskEvent event) {
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    if (event.status != null) {
+      _conversation.showDeviceStatus(event.status!);
+      return;
+    }
+    final appAudio = _conversation.appAudioEnabled;
+    switch (event.button) {
+      case 'mic':
+        if (appAudio) handlePhysicalVoiceSelectorPress();
+      case 'repeat':
+        if (appAudio) handlePhysicalRepeatVoicePress();
+      case 'confirm':
+        if (appAudio) handlePhysicalConfirmPress();
+      case 'back':
+        handlePhysicalBackPress();
+      case 'language':
+        // Language is locked per session (Decision 16): choosing it again starts a new conversation.
+        Navigator.of(context).pushNamedAndRemoveUntil('/language_selection', (route) => false,
+            arguments: widget.language);
+      case 'accessibility':
+        Navigator.of(context).pushReplacementNamed('/chatbot', arguments: {
+          'language': widget.language,
+          'mode': CiviAccessibilityMode.visuallyChallenged,
+        });
+    }
   }
 
   bool _handleHardwareKeyEvent(KeyEvent event) {
@@ -1021,6 +1055,7 @@ class _VisuallyChallengedChatbotViewState
 
   /// Backend session, messages (spoken here or at the kiosk) and voice. Every answer is spoken.
   late final CiviConversation _conversation;
+  StreamSubscription<KioskEvent>? _kioskButtons;
   int _shownMessages = 0;
 
   /// A fixed welcome hint shown first (not legal content), followed by the real conversation.
@@ -1044,6 +1079,7 @@ class _VisuallyChallengedChatbotViewState
       ..onNotice = _showNotice
       ..addListener(_onConversationChanged);
     _conversation.start();
+    _kioskButtons = KioskButtons.instance.events.listen(_handleKioskButton);
 
     _pulseController = AnimationController(
       vsync: this,
@@ -1070,6 +1106,7 @@ class _VisuallyChallengedChatbotViewState
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
+    _kioskButtons?.cancel();
     _conversation.removeListener(_onConversationChanged);
     _conversation.dispose();
     _scrollController.dispose();
@@ -1149,6 +1186,31 @@ class _VisuallyChallengedChatbotViewState
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  /// Physical kiosk buttons (ESP32). With the ESP32 in charge of audio (CIVI_APP_AUDIO=false), Mic,
+  /// Repeat and Confirm are handled on the ESP32 itself and the app only shows its status.
+  void _handleKioskButton(KioskEvent event) {
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+    if (event.status != null) {
+      _conversation.showDeviceStatus(event.status!);
+      return;
+    }
+    final appAudio = _conversation.appAudioEnabled;
+    switch (event.button) {
+      case 'mic':
+        if (appAudio) handlePhysicalVoiceSelectorPress();
+      case 'repeat':
+        if (appAudio) handlePhysicalRepeatVoicePress();
+      case 'confirm':
+        if (appAudio) handlePhysicalConfirmPress();
+      case 'back':
+        handlePhysicalBackPress();
+      case 'language':
+        // Language is locked per session (Decision 16): choosing it again starts a new conversation.
+        Navigator.of(context).pushNamedAndRemoveUntil('/language_selection', (route) => false,
+            arguments: widget.language);
+    }
   }
 
   bool _handleHardwareKeyEvent(KeyEvent event) {

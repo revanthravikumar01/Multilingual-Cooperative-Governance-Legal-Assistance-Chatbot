@@ -55,7 +55,7 @@ class SpeechClient:
     def _send(self, method: str, path: str, **kwargs) -> httpx.Response:
         try:
             response = self._http.request(method, self.base_url + path, **kwargs)
-        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+        except httpx.TransportError as exc:  # timeouts, network errors, dropped connections
             raise TemporaryServiceError(f"speech service not reachable: {exc}") from exc
         if response.status_code == 200:
             return response
